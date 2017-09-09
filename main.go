@@ -64,19 +64,17 @@ func execAndGetOutput(name string, args ...string) (string, error) {
 	return out.String(), err
 }
 
-// Header: User @ hostname
-func makeHeader() (*ui.Par, func(*ui.EvtTimer)) {
-	// Create widget
-	w := ui.NewPar("")
-	w.Height = 3
-
-	// Static information
+func getUsername() string {
 	curUser, userErr := user.Current()
 	userName := "unknown"
 	if userErr == nil {
 		userName = curUser.Username
 	}
 
+	return userName
+}
+
+func getHostname() (string, string) {
 	hostName, hostErr := os.Hostname()
 	if hostErr != nil {
 		hostName = "unknown"
@@ -84,7 +82,24 @@ func makeHeader() (*ui.Par, func(*ui.EvtTimer)) {
 
 	prettyName, prettyNameErr := execAndGetOutput("pretty-hostname")
 
-	if (prettyNameErr == nil) && (prettyName != hostName) {
+	if prettyNameErr == nil {
+		return hostName, prettyName
+	} else {
+		return hostName, hostName
+	}
+}
+
+// Header: User @ hostname
+func makeHeader() (*ui.Par, func(*ui.EvtTimer)) {
+	// Create widget
+	w := ui.NewPar("")
+	w.Height = 3
+
+	// Static information
+	userName := getUsername()
+	hostName, prettyName := getHostname()
+
+	if prettyName != hostName {
 		// Host/pretty name are different
 		w.BorderLabel = fmt.Sprintf(" %v @ %v (%v) ", userName, prettyName, hostName)
 	} else {
@@ -152,6 +167,48 @@ func makeNetwork() (*ui.Par, *ui.Table, func(*ui.EvtTimer), func()) {
 	r()
 
 	return c, w, f, r
+}
+
+func makeBattAudio() (*ui.Par, func(*ui.EvtTimer)) {
+	// Create widget
+	w := ui.NewPar("")
+	w.Height = 3
+
+	// Static information
+	curUser, userErr := user.Current()
+	userName := "unknown"
+	if userErr == nil {
+		userName = curUser.Username
+	}
+
+	hostName, hostErr := os.Hostname()
+	if hostErr != nil {
+		hostName = "unknown"
+	}
+
+	prettyName, prettyNameErr := execAndGetOutput("pretty-hostname")
+
+	if (prettyNameErr == nil) && (prettyName != hostName) {
+		// Host/pretty name are different
+		w.BorderLabel = fmt.Sprintf(" %v @ %v (%v) ", userName, prettyName, hostName)
+	} else {
+		// Host/pretty name are the same (or pretty failed)
+		w.BorderLabel = fmt.Sprintf(" %v @ %v ", userName, hostName)
+	}
+
+	// Function for dynamic information
+	f := func(e *ui.EvtTimer) {
+		if e == nil {
+			// Invoked at startup
+		} else {
+			// Invoked on timer
+		}
+	}
+
+	// Load dynamic info
+	f(nil)
+
+	return w, f
 }
 
 func main() {
