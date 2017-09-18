@@ -38,12 +38,31 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"os/user"
+	"time"
 
+	linuxproc "github.com/c9s/goprocinfo/linux"
 	ui "github.com/gizak/termui"
 )
+
+var timerCounter uint64 = 0
+var lastTimer uint64 = 0
+
+/**
+ * Make a string as wide as requested, with stuff left justified and right justified.
+ *
+ * width:       How wide to get.
+ * left:        What text goes on the left?
+ * right:       What text goes on the right?
+ * fillChar:    What character to use as the filler.
+ */
+func fitAStringToWidth(width int, left string, right string, fillChar string) string {
+	// TODO: This
+	return left + fillChar + right
+}
 
 func makeP(l string) *ui.Par {
 	p := ui.NewPar(l)
@@ -89,8 +108,20 @@ func getHostname() (string, string) {
 	}
 }
 
+func getTime() (time.Time, *linuxproc.Uptime) {
+	now := time.Now().UTC()
+	uptime, err := linuxproc.ReadUptime("/proc/uptime")
+
+	if err != nil {
+		uptime = nil
+	}
+
+	return now, uptime
+
+}
+
 // Header: User @ hostname
-func makeHeader() (*ui.Par, func(*ui.EvtTimer)) {
+func makeHeader() (*ui.Par, func(uint64)) {
 	// Create widget
 	w := ui.NewPar("")
 	w.Height = 3
@@ -98,31 +129,34 @@ func makeHeader() (*ui.Par, func(*ui.EvtTimer)) {
 	// Static information
 	userName := getUsername()
 	hostName, prettyName := getHostname()
+	var userHostHeader string
 
 	if prettyName != hostName {
 		// Host/pretty name are different
-		w.BorderLabel = fmt.Sprintf(" %v @ %v (%v) ", userName, prettyName, hostName)
+		userHostHeader = fmt.Sprintf(" %v @ %v (%v) ", userName, prettyName, hostName)
 	} else {
 		// Host/pretty name are the same (or pretty failed)
-		w.BorderLabel = fmt.Sprintf(" %v @ %v ", userName, hostName)
+		userHostHeader = fmt.Sprintf(" %v @ %v ", userName, hostName)
 	}
 
 	// Function for dynamic information
-	f := func(e *ui.EvtTimer) {
-		if e == nil {
-			// Invoked at startup
-		} else {
-			// Invoked on timer
-		}
+	f := func(count uint64) {
+		now, uptime := getTime()
+		nowStr := now.Format(time.RFC1123Z)
+		uptimeStr := uptime.GetTotalDuration()
+
+		timeStr := fmt.Sprintf("%v (%v)", nowStr, uptimeStr)
+
+		w.BorderLabel = fitAStringToWidth(ui.TermWidth()-4, userHostHeader, timeStr, "-")
 	}
 
 	// Load dynamic info
-	f(nil)
+	f(0)
 
 	return w, f
 }
 
-func makeNetwork() (*ui.Par, *ui.Table, func(*ui.EvtTimer), func()) {
+func makeNetwork() (*ui.Par, *ui.Table, func(uint64), func()) {
 	// Create container
 	c := ui.NewPar("Networking")
 
@@ -134,12 +168,10 @@ func makeNetwork() (*ui.Par, *ui.Table, func(*ui.EvtTimer), func()) {
 	var lastCount uint64 = 0
 
 	// Function for dynamic information
-	f := func(e *ui.EvtTimer) {
-		if (e == nil) || ((e.Count - lastCount) >= 30000) {
+	f := func(count uint64) {
+		if (count == 0) || ((count - lastCount) >= 30000) {
 			// First try, or after a period of time
-			if e != nil {
-				lastCount = e.Count
-			}
+			lastCount = count
 
 			// Load network interfaces and information
 			rows := [][]string{
@@ -163,13 +195,38 @@ func makeNetwork() (*ui.Par, *ui.Table, func(*ui.EvtTimer), func()) {
 	}
 
 	// Load dynamic info
-	f(nil)
+	f(0)
 	r()
 
 	return c, w, f, r
 }
 
-func makeBattAudio() (*ui.Par, func(*ui.EvtTimer)) {
+func makeTime() (*ui.Par, func(uint64)) {
+	// Create widget
+	w := ui.NewPar("Time")
+	w.Height = 4
+
+	c := 1
+
+	// Function for dynamic information
+	f := func(count uint64) {
+		w.BorderLabel = fmt.Sprintf("Time (%v)", c)
+		c = c + 1
+
+		now, uptime := getTime()
+		nowStr := now.Format(time.RFC1123Z)
+		uptimeStr := uptime.GetTotalDuration()
+
+		w.Text = fmt.Sprintf("Now: %v\nUptime: %v", nowStr, uptimeStr)
+	}
+
+	// Load dynamic info
+	f(0)
+
+	return w, f
+}
+
+func makeBattAudio() (*ui.Par, func(uint64)) {
 	// Create widget
 	w := ui.NewPar("")
 	w.Height = 3
@@ -197,8 +254,8 @@ func makeBattAudio() (*ui.Par, func(*ui.EvtTimer)) {
 	}
 
 	// Function for dynamic information
-	f := func(e *ui.EvtTimer) {
-		if e == nil {
+	f := func(count uint64) {
+		if count == 0 {
 			// Invoked at startup
 		} else {
 			// Invoked on timer
@@ -206,7 +263,7 @@ func makeBattAudio() (*ui.Par, func(*ui.EvtTimer)) {
 	}
 
 	// Load dynamic info
-	f(nil)
+	f(0)
 
 	return w, f
 }
@@ -217,7 +274,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer log.Printf("Final Timer: %v (%v)", timerCounter, lastTimer)
 	defer ui.Close()
+
+	ui.DefaultEvtStream.Merge("timer", ui.NewTimerCh(5*time.Second))
 
 	//
 	// Create the widgets
@@ -225,6 +285,7 @@ func main() {
 
 	header, headerFunc := makeHeader()
 	networkContainer, network, networkFunc, networkResize := makeNetwork()
+	time, timeFunc := makeTime()
 
 	battAudio := makeP("battery/audio")
 	disk := makeP("disk")
@@ -258,6 +319,8 @@ func main() {
 			ui.NewCol(3, 0, cpu),
 			ui.NewCol(3, 0, battAudio)),
 		ui.NewRow(
+			ui.NewCol(12, 0, time)),
+		ui.NewRow(
 			ui.NewCol(6, 0, repo),
 			ui.NewCol(6, 0, commits)),
 		ui.NewRow(
@@ -268,24 +331,19 @@ func main() {
 
 	ui.Body.Align()
 
-	//
-	// Timer Updates
-	//
-
-	timerFunc := func(e ui.Event) {
-		pt := e.Data.(ui.EvtTimer)
-		t := &pt
-
-		// Call all update funcs
-		headerFunc(t)
-		networkFunc(t)
+	render := func() {
+		ui.Body.Align()
+		ui.Clear()
+		ui.Render(header, networkContainer, ui.Body)
 	}
 
 	//
 	//  Activate
 	//
 
-	ui.Render(header, ui.Body)
+	log.Printf("Failed: %v", timerCounter)
+
+	render()
 
 	ui.Handle("/sys/kbd/q", func(ui.Event) {
 		// press q to quit
@@ -297,21 +355,37 @@ func main() {
 		ui.StopLoop()
 	})
 
-	ui.Handle("/timer/5s", timerFunc)
+	ui.Handle("/timer/5s", func(e ui.Event) {
+		t := e.Data.(ui.EvtTimer)
+		i := t.Count
 
-	ui.Handle("/sys/wnd/resize", func(e ui.Event) {
+		timerCounter++
+		lastTimer = i
+
+		log.Printf("Timer: %v (%v)", timerCounter, lastTimer)
+
+		// Call all update funcs
+		headerFunc(lastTimer)
+		networkFunc(lastTimer)
+		timeFunc(lastTimer)
+
+		// Re-render
+		render()
+	})
+
+	ui.Handle("/sys/wnd/resize", func(ui.Event) {
 		// Update header on resize
 		header.Width = ui.TermWidth()
 		header.Height = ui.TermHeight()
 
 		// Re-layout on resize
 		ui.Body.Width = ui.TermWidth() - 2
-		ui.Body.Align()
-		ui.Clear()
-		ui.Render(header, networkContainer, ui.Body)
 
 		// Update resize funcs
 		networkResize()
+
+		// Re-render
+		render()
 	})
 
 	ui.Loop()
