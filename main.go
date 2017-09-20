@@ -84,6 +84,19 @@ func fitAStringToWidth(width int, left string, right string, fillChar string) st
 	return fmt.Sprintf("%s %s %s", left, fillStr, right)
 }
 
+func rightJustify(width int, str string) string {
+
+	rightJustfyLen := width - utf8.RuneCountInString(str)
+
+	log.Printf("Width: %v, Rune: %v, Len: %v, Justify: %v", width, utf8.RuneCountInString(str), len(str), rightJustfyLen)
+	var rightJustify = ""
+	if rightJustfyLen > 0 {
+		rightJustify = strings.Repeat(" ", rightJustfyLen)
+	}
+
+	return rightJustify + str
+}
+
 ////////////////////////////////////////////
 // Utility: Data gathering
 ////////////////////////////////////////////
@@ -299,7 +312,9 @@ type TimeWidget struct {
 func NewTimeWidget() *TimeWidget {
 	// Create base element
 	e := ui.NewPar("Time")
-	e.Height = 4
+	e.Height = 1
+	e.Border = false
+	e.TextFgColor = ui.ColorGreen
 
 	// Create widget
 	w := &TimeWidget{
@@ -310,6 +325,12 @@ func NewTimeWidget() *TimeWidget {
 	w.update()
 	w.resize()
 
+	// Also want to run an update right after things get rendered so we can use the width to right justify correctly
+	// TODO: This isn't working right, isn't being called correctly
+	time.AfterFunc(time.Second*1, func() {
+		w.update()
+	})
+
 	return w
 }
 
@@ -318,18 +339,18 @@ func (w *TimeWidget) getGridWidget() ui.GridBufferer {
 }
 
 func (w *TimeWidget) update() {
-	w.widget.BorderLabel = fmt.Sprintf("Time (%v)", w.tickCounter)
-	w.tickCounter++
-
 	now, uptime := getTime()
-	nowStr := now.Format(time.RFC1123Z)
+	nowStr := now.Local().Format(time.RFC1123Z)
 	uptimeStr := uptime.GetTotalDuration()
 
-	w.widget.Text = fmt.Sprintf("Now: %v\nUptime: %v", nowStr, uptimeStr)
+	timeStr := fmt.Sprintf("%v (%v) ", nowStr, uptimeStr)
+
+	w.widget.Text = rightJustify(w.widget.Width, timeStr)
 }
 
 func (w *TimeWidget) resize() {
-	// Do nothing
+	// Update
+	w.update()
 }
 
 ////////////////////////////////////////////
@@ -422,12 +443,20 @@ func (w *KerberosWidget) setLastUpdated(t time.Time) {
 ////////////////////////////////////////////
 
 func main() {
-	// Set up the console UI
-	err := ui.Init()
-	if err != nil {
-		panic(err)
+	// Set up logging
+	logFile, logErr := os.OpenFile("go.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0660)
+	if logErr != nil {
+		panic(logErr)
 	}
-	defer log.Printf("Final Timer: %v (%v)", timerCounter, lastTimer)
+	defer logFile.Close()
+
+	log.SetOutput(logFile)
+
+	// Set up the console UI
+	uiErr := ui.Init()
+	if uiErr != nil {
+		panic(uiErr)
+	}
 	defer ui.Close()
 
 	ui.DefaultEvtStream.Merge("timer", ui.NewTimerCh(5*time.Second))
@@ -487,8 +516,8 @@ func main() {
 
 	ui.Body.AddRows(
 		ui.NewRow(
-			ui.NewCol(6, 0, time.getGridWidget()),
-			ui.NewCol(6, 0, kerberos.getGridWidget())),
+			ui.NewCol(6, 0, kerberos.getGridWidget()),
+			ui.NewCol(6, 0, time.getGridWidget())),
 		ui.NewRow(
 			ui.NewCol(3, 0, network.getGridWidget()),
 			ui.NewCol(3, 0, disk.getGridWidget()),
