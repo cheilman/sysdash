@@ -53,6 +53,10 @@ import (
 var timerCounter uint64 = 0
 var lastTimer uint64 = 0
 
+////////////////////////////////////////////
+// Utility: Formatting
+////////////////////////////////////////////
+
 /**
  * Make a string as wide as requested, with stuff left justified and right justified.
  *
@@ -69,18 +73,19 @@ func fitAStringToWidth(width int, left string, right string, fillChar string) st
 	// Figure out how many filler chars we need
 	fillLen := width - (leftLen + rightLen)
 	fillRunes := (fillLen - 1 + fillCharLen) / fillCharLen
+
+	if fillRunes < 0 {
+		fillRunes = 0
+	}
+
 	fillStr := strings.Repeat(fillChar, fillRunes)
 
 	return fmt.Sprintf("%s %s %s", left, fillStr, right)
 }
 
-func makeP(l string) *ui.Par {
-	p := ui.NewPar(l)
-	p.Height = 5
-	p.BorderLabel = l
-
-	return p
-}
+////////////////////////////////////////////
+// Utility: Data gathering
+////////////////////////////////////////////
 
 func execAndGetOutput(name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
@@ -130,11 +135,61 @@ func getTime() (time.Time, *linuxproc.Uptime) {
 
 }
 
-// Header: User @ hostname
-func makeHeader() (*ui.Par, func(uint64)) {
-	// Create widget
-	w := ui.NewPar("")
-	w.Height = 3
+////////////////////////////////////////////
+// Utility: Widgets
+////////////////////////////////////////////
+
+type CAHWidget interface {
+	getGridWidget() ui.GridBufferer
+	update(timer uint64)
+	resize()
+}
+
+type TempWidget struct {
+	widget *ui.Par
+}
+
+func NewTempWidget(l string) *TempWidget {
+	p := ui.NewPar(l)
+	p.Height = 5
+	p.BorderLabel = l
+
+	// Create our widget
+	w := &TempWidget{
+		widget: p,
+	}
+
+	// Invoke its functions
+	w.update(0)
+	w.resize()
+
+	return w
+}
+
+func (w *TempWidget) getGridWidget() ui.GridBufferer {
+	return w.widget
+}
+
+func (w *TempWidget) update(count uint64) {
+	// Do nothing
+}
+
+func (w *TempWidget) resize() {
+	// Do nothing
+}
+
+////////////////////////////////////////////
+// Widget: Header
+////////////////////////////////////////////
+
+type HeaderWidget struct {
+	widget         *ui.Par
+	userHostHeader string
+}
+
+func NewHeaderWidget() *HeaderWidget {
+	// Create base element
+	e := ui.NewPar("")
 
 	// Static information
 	userName := getUsername()
@@ -149,134 +204,184 @@ func makeHeader() (*ui.Par, func(uint64)) {
 		userHostHeader = fmt.Sprintf("%v @ %v", userName, hostName)
 	}
 
-	// Function for dynamic information
-	f := func(count uint64) {
-		now, uptime := getTime()
-		nowStr := now.Format(time.RFC1123Z)
-		uptimeStr := uptime.GetTotalDuration()
-
-		timeStr := fmt.Sprintf("%v (%v) ", nowStr, uptimeStr)
-
-		w.BorderLabel = fitAStringToWidth(ui.TermWidth()-4, userHostHeader, timeStr, "-")
+	// Create our widget
+	w := &HeaderWidget{
+		widget:         e,
+		userHostHeader: userHostHeader,
 	}
 
-	// Load dynamic info
-	f(0)
+	// Invoke its functions
+	w.update(0)
+	w.resize()
 
-	return w, f
+	return w
 }
 
-func makeNetwork() (*ui.Par, *ui.Table, func(uint64), func()) {
-	// Create container
-	c := ui.NewPar("Networking")
+func (w *HeaderWidget) getGridWidget() ui.GridBufferer {
+	return w.widget
+}
+
+func (w *HeaderWidget) update(count uint64) {
+	now, uptime := getTime()
+	nowStr := now.Local().Format(time.RFC1123Z)
+	uptimeStr := uptime.GetTotalDuration()
+
+	timeStr := fmt.Sprintf("%v (%v) ", nowStr, uptimeStr)
+
+	w.widget.BorderLabel = fitAStringToWidth(ui.TermWidth()-4, w.userHostHeader, timeStr, "-")
+}
+
+func (w *HeaderWidget) resize() {
+	// Update header on window resize
+	w.widget.X = 0
+	w.widget.Y = 0
+	w.widget.Width = ui.TermWidth()
+	w.widget.Height = ui.TermHeight()
+
+	// Also update dynamic information, since the spacing depends on the window width
+	w.update(0)
+}
+
+////////////////////////////////////////////
+// Widget: Time
+////////////////////////////////////////////
+
+type TimeWidget struct {
+	widget      *ui.Par
+	tickCounter uint64
+}
+
+func NewTimeWidget() *TimeWidget {
+	// Create base element
+	e := ui.NewPar("Time")
+	e.Height = 4
 
 	// Create widget
-	w := ui.NewTable()
-	w.Height = 8
-	w.Border = false
-
-	var lastCount uint64 = 0
-
-	// Function for dynamic information
-	f := func(count uint64) {
-		if (count == 0) || ((count - lastCount) >= 30000) {
-			// First try, or after a period of time
-			lastCount = count
-
-			// Load network interfaces and information
-			rows := [][]string{
-				[]string{"interface0", "interface2", "interface3"},
-				[]string{"123.456.789.123", "123.456.789.123", "123.456.789.123"},
-			}
-
-			w.Rows = rows
-
-			w.Analysis()
-			w.SetSize()
-		}
+	w := &TimeWidget{
+		widget:      e,
+		tickCounter: 0,
 	}
 
-	// Function for resizes
-	r := func() {
-		c.X = w.X
-		c.Y = w.Y
-		c.Width = w.Width
-		c.Height = w.Height
-	}
+	w.update(0)
+	w.resize()
 
-	// Load dynamic info
-	f(0)
-	r()
-
-	return c, w, f, r
+	return w
 }
 
-func makeTime() (*ui.Par, func(uint64)) {
-	// Create widget
-	w := ui.NewPar("Time")
-	w.Height = 4
-
-	c := 1
-
-	// Function for dynamic information
-	f := func(count uint64) {
-		w.BorderLabel = fmt.Sprintf("Time (%v)", c)
-		c = c + 1
-
-		now, uptime := getTime()
-		nowStr := now.Format(time.RFC1123Z)
-		uptimeStr := uptime.GetTotalDuration()
-
-		w.Text = fmt.Sprintf("Now: %v\nUptime: %v", nowStr, uptimeStr)
-	}
-
-	// Load dynamic info
-	f(0)
-
-	return w, f
+func (w *TimeWidget) getGridWidget() ui.GridBufferer {
+	return w.widget
 }
 
-func makeBattAudio() (*ui.Par, func(uint64)) {
-	// Create widget
-	w := ui.NewPar("")
-	w.Height = 3
+func (w *TimeWidget) update(count uint64) {
+	w.widget.BorderLabel = fmt.Sprintf("Time (%v)", w.tickCounter)
+	w.tickCounter++
 
-	// Static information
-	curUser, userErr := user.Current()
-	userName := "unknown"
-	if userErr == nil {
-		userName = curUser.Username
-	}
+	now, uptime := getTime()
+	nowStr := now.Format(time.RFC1123Z)
+	uptimeStr := uptime.GetTotalDuration()
 
-	hostName, hostErr := os.Hostname()
-	if hostErr != nil {
-		hostName = "unknown"
-	}
-
-	prettyName, prettyNameErr := execAndGetOutput("pretty-hostname")
-
-	if (prettyNameErr == nil) && (prettyName != hostName) {
-		// Host/pretty name are different
-		w.BorderLabel = fmt.Sprintf(" %v @ %v (%v) ", userName, prettyName, hostName)
-	} else {
-		// Host/pretty name are the same (or pretty failed)
-		w.BorderLabel = fmt.Sprintf(" %v @ %v ", userName, hostName)
-	}
-
-	// Function for dynamic information
-	f := func(count uint64) {
-		if count == 0 {
-			// Invoked at startup
-		} else {
-			// Invoked on timer
-		}
-	}
-
-	// Load dynamic info
-	f(0)
-
-	return w, f
+	w.widget.Text = fmt.Sprintf("Now: %v\nUptime: %v", nowStr, uptimeStr)
 }
+
+func (w *TimeWidget) resize() {
+	// Do nothing
+}
+
+////////////////////////////////////////////
+// Creating our widgets
+////////////////////////////////////////////
+
+//
+//func makeNetwork() *CAHWidget {
+//	// Create container
+//	c := ui.NewPar("Networking")
+//
+//	// Create widget
+//	w := ui.NewTable()
+//	w.Height = 8
+//	w.Border = false
+//
+//	var lastCount uint64 = 0
+//
+//	// Function for dynamic information
+//	f := func(count uint64) {
+//		if (count == 0) || ((count - lastCount) >= 30000) {
+//			// First try, or after a period of time
+//			lastCount = count
+//
+//			// Load network interfaces and information
+//			rows := [][]string{
+//				[]string{"interface0", "interface2", "interface3"},
+//				[]string{"123.456.789.123", "123.456.789.123", "123.456.789.123"},
+//			}
+//
+//			w.Rows = rows
+//
+//			w.Analysis()
+//			w.SetSize()
+//		}
+//	}
+//
+//	// Function for resizes
+//	r := func() {
+//		c.X = w.X
+//		c.Y = w.Y
+//		c.Width = w.Width
+//		c.Height = w.Height
+//	}
+//
+//	// Load dynamic info
+//	f(0)
+//	r()
+//
+//	return NewCAHWidget(w, &f, &r)
+//}
+//
+//func makeBattAudio() *CAHWidget {
+//	// Create widget
+//	w := ui.NewPar("")
+//	w.Height = 3
+//
+//	// Static information
+//	curUser, userErr := user.Current()
+//	userName := "unknown"
+//	if userErr == nil {
+//		userName = curUser.Username
+//	}
+//
+//	hostName, hostErr := os.Hostname()
+//	if hostErr != nil {
+//		hostName = "unknown"
+//	}
+//
+//	prettyName, prettyNameErr := execAndGetOutput("pretty-hostname")
+//
+//	if (prettyNameErr == nil) && (prettyName != hostName) {
+//		// Host/pretty name are different
+//		w.BorderLabel = fmt.Sprintf(" %v @ %v (%v) ", userName, prettyName, hostName)
+//	} else {
+//		// Host/pretty name are the same (or pretty failed)
+//		w.BorderLabel = fmt.Sprintf(" %v @ %v ", userName, hostName)
+//	}
+//
+//	// Function for dynamic information
+//	f := func(count uint64) {
+//		if count == 0 {
+//			// Invoked at startup
+//		} else {
+//			// Invoked on timer
+//		}
+//	}
+//
+//	// Load dynamic info
+//	f(0)
+//
+//	return NewCAHWidget(w, &f, nil)
+//}
+
+////////////////////////////////////////////
+// Where the real stuff happens
+////////////////////////////////////////////
 
 func main() {
 	// Set up the console UI
@@ -287,66 +392,82 @@ func main() {
 	defer log.Printf("Final Timer: %v (%v)", timerCounter, lastTimer)
 	defer ui.Close()
 
+	// New 5-second timer
 	ui.DefaultEvtStream.Merge("timer", ui.NewTimerCh(5*time.Second))
 
 	//
 	// Create the widgets
 	//
+	widgets := make([]CAHWidget, 0)
 
-	header, headerFunc := makeHeader()
-	//networkContainer, network, networkFunc, networkResize := makeNetwork()
-	_, network, networkFunc, networkResize := makeNetwork()
-	time, timeFunc := makeTime()
+	header := NewHeaderWidget()
+	widgets = append(widgets, header)
 
-	battAudio := makeP("battery/audio")
-	disk := makeP("disk")
-	cpu := makeP("cpu")
-	repo := makeP("repos")
-	commits := makeP("commits")
-	twitter1 := makeP("tinycare")
-	twitter2 := makeP("selfcare")
-	twitter3 := makeP("a strange voyage")
-	weather := makeP("weather")
+	network := NewTempWidget("network")
+	widgets = append(widgets, network)
+
+	time := NewTimeWidget()
+	widgets = append(widgets, time)
+
+	battAudio := NewTempWidget("battery/audio")
+	widgets = append(widgets, battAudio)
+
+	disk := NewTempWidget("disk")
+	widgets = append(widgets, disk)
+
+	cpu := NewTempWidget("cpu")
+	widgets = append(widgets, cpu)
+
+	repo := NewTempWidget("repos")
+	widgets = append(widgets, repo)
+
+	commits := NewTempWidget("commits")
+	widgets = append(widgets, commits)
+
+	twitter1 := NewTempWidget("tinycare")
+	widgets = append(widgets, twitter1)
+
+	twitter2 := NewTempWidget("selfcare")
+	widgets = append(widgets, twitter2)
+
+	twitter3 := NewTempWidget("a strange voyage")
+	widgets = append(widgets, twitter3)
+
+	weather := NewTempWidget("weather")
+	widgets = append(widgets, weather)
 
 	//
 	// Create the layout
 	//
 
-	// Header box
-	header.X = 0
-	header.Y = 0
-	header.Width = ui.TermWidth()
-	header.Height = ui.TermHeight()
-
-	// Allow the header box to wrap all around
+	// Give space around the ui.Body for the header box to wrap all around
 	ui.Body.Width = ui.TermWidth() - 2
 	ui.Body.X = 1
 	ui.Body.Y = 1
 
 	ui.Body.AddRows(
 		ui.NewRow(
-			ui.NewCol(3, 0, network),
-			ui.NewCol(3, 0, disk),
-			ui.NewCol(3, 0, cpu),
-			ui.NewCol(3, 0, battAudio)),
+			ui.NewCol(3, 0, network.getGridWidget()),
+			ui.NewCol(3, 0, disk.getGridWidget()),
+			ui.NewCol(3, 0, cpu.getGridWidget()),
+			ui.NewCol(3, 0, battAudio.getGridWidget())),
 		ui.NewRow(
-			ui.NewCol(12, 0, time)),
+			ui.NewCol(12, 0, time.getGridWidget())),
 		ui.NewRow(
-			ui.NewCol(6, 0, repo),
-			ui.NewCol(6, 0, commits)),
+			ui.NewCol(6, 0, repo.getGridWidget()),
+			ui.NewCol(6, 0, commits.getGridWidget())),
 		ui.NewRow(
-			ui.NewCol(3, 0, weather),
-			ui.NewCol(3, 0, twitter1),
-			ui.NewCol(3, 0, twitter2),
-			ui.NewCol(3, 0, twitter3)))
+			ui.NewCol(3, 0, weather.getGridWidget()),
+			ui.NewCol(3, 0, twitter1.getGridWidget()),
+			ui.NewCol(3, 0, twitter2.getGridWidget()),
+			ui.NewCol(3, 0, twitter3.getGridWidget())))
 
 	ui.Body.Align()
 
 	render := func() {
 		ui.Body.Align()
 		ui.Clear()
-		//ui.Render(header, networkContainer, ui.Body)
-		ui.Render(header, ui.Body)
+		ui.Render(header.widget, ui.Body)
 	}
 
 	//
@@ -374,27 +495,23 @@ func main() {
 		timerCounter++
 		lastTimer = i
 
-		log.Printf("Timer: %v (%v)", timerCounter, lastTimer)
-
 		// Call all update funcs
-		headerFunc(lastTimer)
-		networkFunc(lastTimer)
-		timeFunc(lastTimer)
+		for _, w := range widgets {
+			w.update(i)
+		}
 
 		// Re-render
 		render()
 	})
 
 	ui.Handle("/sys/wnd/resize", func(ui.Event) {
-		// Update header on resize
-		header.Width = ui.TermWidth()
-		header.Height = ui.TermHeight()
-
 		// Re-layout on resize
 		ui.Body.Width = ui.TermWidth() - 2
 
-		// Update resize funcs
-		networkResize()
+		// Call all resize funcs
+		for _, w := range widgets {
+			w.resize()
+		}
 
 		// Re-render
 		render()
