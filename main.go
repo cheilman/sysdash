@@ -337,9 +337,10 @@ func (w *TimeWidget) update() {
 	nowStr := now.Local().Format(time.RFC1123Z)
 	uptimeStr := uptime.GetTotalDuration()
 
-	timeStr := fmt.Sprintf("%v (%v) ", nowStr, uptimeStr)
+	timeStr := fmt.Sprintf("%v  Up: %v ", nowStr, uptimeStr)
 
-	w.widget.Text = rightJustify(w.widget.Width, timeStr)
+	//w.widget.Text = rightJustify(w.widget.Width, timeStr)
+	w.widget.Text = timeStr
 }
 
 func (w *TimeWidget) resize() {
