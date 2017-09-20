@@ -43,6 +43,7 @@ import (
 	"os/exec"
 	"os/user"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -87,15 +88,31 @@ func fitAStringToWidth(width int, left string, right string, fillChar string) st
 // Utility: Data gathering
 ////////////////////////////////////////////
 
-func execAndGetOutput(name string, args ...string) (string, error) {
+func execAndGetOutput(name string, args ...string) (stdout string, exitCode int, err error) {
 	cmd := exec.Command(name, args...)
 
 	var out bytes.Buffer
 	cmd.Stdout = &out
 
-	err := cmd.Run()
+	err = cmd.Run()
 
-	return out.String(), err
+	// Getting the exit code is platform dependant, this code isn't portable
+	exitCode = 0
+
+	if err != nil {
+		// Based on: https://stackoverflow.com/questions/10385551/get-exit-code-go
+		if exitError, ok := err.(*exec.ExitError); ok {
+			ws := exitError.Sys().(syscall.WaitStatus)
+			exitCode = ws.ExitStatus()
+		} else {
+			// Failed, but on a platform where this conversion doesn't work...
+			exitCode = 1
+		}
+	}
+
+	stdout = out.String()
+
+	return
 }
 
 func getUsername() string {
@@ -114,7 +131,7 @@ func getHostname() (string, string) {
 		hostName = "unknown"
 	}
 
-	prettyName, prettyNameErr := execAndGetOutput("pretty-hostname")
+	prettyName, _, prettyNameErr := execAndGetOutput("pretty-hostname")
 
 	if prettyNameErr == nil {
 		return hostName, prettyName
@@ -141,8 +158,35 @@ func getTime() (time.Time, *linuxproc.Uptime) {
 
 type CAHWidget interface {
 	getGridWidget() ui.GridBufferer
-	update(timer uint64)
+	update()
 	resize()
+}
+
+type UpdateInterval interface {
+	getUpdateInterval() time.Duration
+	getLastUpdated() *time.Time
+	setLastUpdated(t time.Time)
+}
+
+func shouldUpdate(updater UpdateInterval) bool {
+	now := time.Now()
+	lastUpdated := updater.getLastUpdated()
+
+	if lastUpdated == nil {
+		// First time, execute it
+		updater.setLastUpdated(now)
+		return true
+	} else {
+		// Has enough time passed?
+		elapsed := now.Sub(*lastUpdated)
+
+		if elapsed.Nanoseconds() > updater.getUpdateInterval().Nanoseconds() {
+			updater.setLastUpdated(time.Now())
+			return true
+		}
+	}
+
+	return false
 }
 
 type TempWidget struct {
@@ -160,7 +204,7 @@ func NewTempWidget(l string) *TempWidget {
 	}
 
 	// Invoke its functions
-	w.update(0)
+	w.update()
 	w.resize()
 
 	return w
@@ -170,7 +214,7 @@ func (w *TempWidget) getGridWidget() ui.GridBufferer {
 	return w.widget
 }
 
-func (w *TempWidget) update(count uint64) {
+func (w *TempWidget) update() {
 	// Do nothing
 }
 
@@ -185,6 +229,7 @@ func (w *TempWidget) resize() {
 type HeaderWidget struct {
 	widget         *ui.Par
 	userHostHeader string
+	lastUpdated    uint64
 }
 
 func NewHeaderWidget() *HeaderWidget {
@@ -211,7 +256,7 @@ func NewHeaderWidget() *HeaderWidget {
 	}
 
 	// Invoke its functions
-	w.update(0)
+	w.update()
 	w.resize()
 
 	return w
@@ -221,7 +266,7 @@ func (w *HeaderWidget) getGridWidget() ui.GridBufferer {
 	return w.widget
 }
 
-func (w *HeaderWidget) update(count uint64) {
+func (w *HeaderWidget) update() {
 	now, uptime := getTime()
 	nowStr := now.Local().Format(time.RFC1123Z)
 	uptimeStr := uptime.GetTotalDuration()
@@ -239,7 +284,7 @@ func (w *HeaderWidget) resize() {
 	w.widget.Height = ui.TermHeight()
 
 	// Also update dynamic information, since the spacing depends on the window width
-	w.update(0)
+	w.update()
 }
 
 ////////////////////////////////////////////
@@ -262,7 +307,7 @@ func NewTimeWidget() *TimeWidget {
 		tickCounter: 0,
 	}
 
-	w.update(0)
+	w.update()
 	w.resize()
 
 	return w
@@ -272,7 +317,7 @@ func (w *TimeWidget) getGridWidget() ui.GridBufferer {
 	return w.widget
 }
 
-func (w *TimeWidget) update(count uint64) {
+func (w *TimeWidget) update() {
 	w.widget.BorderLabel = fmt.Sprintf("Time (%v)", w.tickCounter)
 	w.tickCounter++
 
@@ -288,96 +333,89 @@ func (w *TimeWidget) resize() {
 }
 
 ////////////////////////////////////////////
-// Creating our widgets
+// Widget: Kerberos
 ////////////////////////////////////////////
 
-//
-//func makeNetwork() *CAHWidget {
-//	// Create container
-//	c := ui.NewPar("Networking")
-//
-//	// Create widget
-//	w := ui.NewTable()
-//	w.Height = 8
-//	w.Border = false
-//
-//	var lastCount uint64 = 0
-//
-//	// Function for dynamic information
-//	f := func(count uint64) {
-//		if (count == 0) || ((count - lastCount) >= 30000) {
-//			// First try, or after a period of time
-//			lastCount = count
-//
-//			// Load network interfaces and information
-//			rows := [][]string{
-//				[]string{"interface0", "interface2", "interface3"},
-//				[]string{"123.456.789.123", "123.456.789.123", "123.456.789.123"},
-//			}
-//
-//			w.Rows = rows
-//
-//			w.Analysis()
-//			w.SetSize()
-//		}
-//	}
-//
-//	// Function for resizes
-//	r := func() {
-//		c.X = w.X
-//		c.Y = w.Y
-//		c.Width = w.Width
-//		c.Height = w.Height
-//	}
-//
-//	// Load dynamic info
-//	f(0)
-//	r()
-//
-//	return NewCAHWidget(w, &f, &r)
-//}
-//
-//func makeBattAudio() *CAHWidget {
-//	// Create widget
-//	w := ui.NewPar("")
-//	w.Height = 3
-//
-//	// Static information
-//	curUser, userErr := user.Current()
-//	userName := "unknown"
-//	if userErr == nil {
-//		userName = curUser.Username
-//	}
-//
-//	hostName, hostErr := os.Hostname()
-//	if hostErr != nil {
-//		hostName = "unknown"
-//	}
-//
-//	prettyName, prettyNameErr := execAndGetOutput("pretty-hostname")
-//
-//	if (prettyNameErr == nil) && (prettyName != hostName) {
-//		// Host/pretty name are different
-//		w.BorderLabel = fmt.Sprintf(" %v @ %v (%v) ", userName, prettyName, hostName)
-//	} else {
-//		// Host/pretty name are the same (or pretty failed)
-//		w.BorderLabel = fmt.Sprintf(" %v @ %v ", userName, hostName)
-//	}
-//
-//	// Function for dynamic information
-//	f := func(count uint64) {
-//		if count == 0 {
-//			// Invoked at startup
-//		} else {
-//			// Invoked on timer
-//		}
-//	}
-//
-//	// Load dynamic info
-//	f(0)
-//
-//	return NewCAHWidget(w, &f, nil)
-//}
+const KerberosUpdateIntervalSeconds = 10
+
+type KerberosWidget struct {
+	widget      *ui.Par
+	lastUpdated *time.Time
+}
+
+func NewKerberosWidget() *KerberosWidget {
+	// Create base element
+	e := ui.NewPar("Kerberos")
+	e.Height = 1
+	e.Border = false
+
+	// Create widget
+	w := &KerberosWidget{
+		widget:      e,
+		lastUpdated: nil,
+	}
+
+	w.update()
+	w.resize()
+
+	return w
+}
+
+func (w *KerberosWidget) getGridWidget() ui.GridBufferer {
+	return w.widget
+}
+
+func (w *KerberosWidget) update() {
+	if shouldUpdate(w) {
+		// Do we have a ticket?
+		_, exitCode, _ := execAndGetOutput("klist", "-s")
+
+		hasTicket := exitCode == 0
+
+		// Get the time left
+		timeLeftOutput, _, err := execAndGetOutput("kleft", "")
+		var hasTimeLeft = false
+		var timeLeft string
+
+		if err == nil {
+			timeLeftParts := strings.Split(timeLeftOutput, " ")
+			if len(timeLeftParts) > 1 {
+				hasTimeLeft = true
+				timeLeft = strings.TrimSpace(timeLeftParts[1])
+			}
+		}
+
+		// Piece it all together
+		if hasTicket {
+			if hasTimeLeft {
+				w.widget.Text = fmt.Sprintf("Krb: OK (%v)", timeLeft)
+			} else {
+				w.widget.Text = fmt.Sprintf("Krb: OK")
+			}
+			w.widget.TextFgColor = ui.ColorGreen + ui.AttrBold
+		} else {
+			w.widget.Text = fmt.Sprintf("Krb: NO TICKET")
+			w.widget.TextFgColor = ui.ColorRed + ui.AttrBold
+		}
+	}
+}
+
+func (w *KerberosWidget) resize() {
+	// Do nothing
+}
+
+func (w *KerberosWidget) getUpdateInterval() time.Duration {
+	// Update every 10 seconds
+	return time.Second * 5
+}
+
+func (w *KerberosWidget) getLastUpdated() *time.Time {
+	return w.lastUpdated
+}
+
+func (w *KerberosWidget) setLastUpdated(t time.Time) {
+	w.lastUpdated = &t
+}
 
 ////////////////////////////////////////////
 // Where the real stuff happens
@@ -392,7 +430,6 @@ func main() {
 	defer log.Printf("Final Timer: %v (%v)", timerCounter, lastTimer)
 	defer ui.Close()
 
-	// New 5-second timer
 	ui.DefaultEvtStream.Merge("timer", ui.NewTimerCh(5*time.Second))
 
 	//
@@ -402,6 +439,9 @@ func main() {
 
 	header := NewHeaderWidget()
 	widgets = append(widgets, header)
+
+	kerberos := NewKerberosWidget()
+	widgets = append(widgets, kerberos)
 
 	network := NewTempWidget("network")
 	widgets = append(widgets, network)
@@ -447,12 +487,13 @@ func main() {
 
 	ui.Body.AddRows(
 		ui.NewRow(
+			ui.NewCol(6, 0, time.getGridWidget()),
+			ui.NewCol(6, 0, kerberos.getGridWidget())),
+		ui.NewRow(
 			ui.NewCol(3, 0, network.getGridWidget()),
 			ui.NewCol(3, 0, disk.getGridWidget()),
 			ui.NewCol(3, 0, cpu.getGridWidget()),
 			ui.NewCol(3, 0, battAudio.getGridWidget())),
-		ui.NewRow(
-			ui.NewCol(12, 0, time.getGridWidget())),
 		ui.NewRow(
 			ui.NewCol(6, 0, repo.getGridWidget()),
 			ui.NewCol(6, 0, commits.getGridWidget())),
@@ -489,15 +530,9 @@ func main() {
 	})
 
 	ui.Handle("/timer/5s", func(e ui.Event) {
-		t := e.Data.(ui.EvtTimer)
-		i := t.Count
-
-		timerCounter++
-		lastTimer = i
-
 		// Call all update funcs
 		for _, w := range widgets {
-			w.update(i)
+			w.update()
 		}
 
 		// Re-render
