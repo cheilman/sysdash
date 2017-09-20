@@ -42,7 +42,9 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	linuxproc "github.com/c9s/goprocinfo/linux"
 	ui "github.com/gizak/termui"
@@ -60,8 +62,16 @@ var lastTimer uint64 = 0
  * fillChar:    What character to use as the filler.
  */
 func fitAStringToWidth(width int, left string, right string, fillChar string) string {
-	// TODO: This
-	return left + fillChar + right
+	leftLen := utf8.RuneCountInString(left)
+	rightLen := utf8.RuneCountInString(right)
+	fillCharLen := utf8.RuneCountInString(fillChar) // Usually 1
+
+	// Figure out how many filler chars we need
+	fillLen := width - (leftLen + rightLen)
+	fillRunes := (fillLen - 1 + fillCharLen) / fillCharLen
+	fillStr := strings.Repeat(fillChar, fillRunes)
+
+	return fmt.Sprintf("%s %s %s", left, fillStr, right)
 }
 
 func makeP(l string) *ui.Par {
@@ -133,10 +143,10 @@ func makeHeader() (*ui.Par, func(uint64)) {
 
 	if prettyName != hostName {
 		// Host/pretty name are different
-		userHostHeader = fmt.Sprintf(" %v @ %v (%v) ", userName, prettyName, hostName)
+		userHostHeader = fmt.Sprintf(" %v @ %v (%v)", userName, prettyName, hostName)
 	} else {
 		// Host/pretty name are the same (or pretty failed)
-		userHostHeader = fmt.Sprintf(" %v @ %v ", userName, hostName)
+		userHostHeader = fmt.Sprintf("%v @ %v", userName, hostName)
 	}
 
 	// Function for dynamic information
@@ -145,7 +155,7 @@ func makeHeader() (*ui.Par, func(uint64)) {
 		nowStr := now.Format(time.RFC1123Z)
 		uptimeStr := uptime.GetTotalDuration()
 
-		timeStr := fmt.Sprintf("%v (%v)", nowStr, uptimeStr)
+		timeStr := fmt.Sprintf("%v (%v) ", nowStr, uptimeStr)
 
 		w.BorderLabel = fitAStringToWidth(ui.TermWidth()-4, userHostHeader, timeStr, "-")
 	}
@@ -284,7 +294,8 @@ func main() {
 	//
 
 	header, headerFunc := makeHeader()
-	networkContainer, network, networkFunc, networkResize := makeNetwork()
+	//networkContainer, network, networkFunc, networkResize := makeNetwork()
+	_, network, networkFunc, networkResize := makeNetwork()
 	time, timeFunc := makeTime()
 
 	battAudio := makeP("battery/audio")
@@ -334,7 +345,8 @@ func main() {
 	render := func() {
 		ui.Body.Align()
 		ui.Clear()
-		ui.Render(header, networkContainer, ui.Body)
+		//ui.Render(header, networkContainer, ui.Body)
+		ui.Render(header, ui.Body)
 	}
 
 	//
