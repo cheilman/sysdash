@@ -242,7 +242,6 @@ func (w *TempWidget) resize() {
 type HeaderWidget struct {
 	widget         *ui.Par
 	userHostHeader string
-	lastUpdated    uint64
 }
 
 func NewHeaderWidget() *HeaderWidget {
@@ -262,6 +261,8 @@ func NewHeaderWidget() *HeaderWidget {
 		userHostHeader = fmt.Sprintf("%v @ %v", userName, hostName)
 	}
 
+	e.BorderLabel = userHostHeader
+
 	// Create our widget
 	w := &HeaderWidget{
 		widget:         e,
@@ -280,13 +281,6 @@ func (w *HeaderWidget) getGridWidget() ui.GridBufferer {
 }
 
 func (w *HeaderWidget) update() {
-	now, uptime := getTime()
-	nowStr := now.Local().Format(time.RFC1123Z)
-	uptimeStr := uptime.GetTotalDuration()
-
-	timeStr := fmt.Sprintf("%v (%v) ", nowStr, uptimeStr)
-
-	w.widget.BorderLabel = fitAStringToWidth(ui.TermWidth()-4, w.userHostHeader, timeStr, "-")
 }
 
 func (w *HeaderWidget) resize() {
