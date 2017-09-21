@@ -128,43 +128,6 @@ func execAndGetOutput(name string, args ...string) (stdout string, exitCode int,
 	return
 }
 
-func getUsername() string {
-	curUser, userErr := user.Current()
-	userName := "unknown"
-	if userErr == nil {
-		userName = curUser.Username
-	}
-
-	return userName
-}
-
-func getHostname() (string, string) {
-	hostName, hostErr := os.Hostname()
-	if hostErr != nil {
-		hostName = "unknown"
-	}
-
-	prettyName, _, prettyNameErr := execAndGetOutput("pretty-hostname")
-
-	if prettyNameErr == nil {
-		return hostName, prettyName
-	} else {
-		return hostName, hostName
-	}
-}
-
-func getTime() (time.Time, *linuxproc.Uptime) {
-	now := time.Now().UTC()
-	uptime, err := linuxproc.ReadUptime("/proc/uptime")
-
-	if err != nil {
-		uptime = nil
-	}
-
-	return now, uptime
-
-}
-
 ////////////////////////////////////////////
 // Utility: Widgets
 ////////////////////////////////////////////
@@ -294,6 +257,31 @@ func (w *HeaderWidget) resize() {
 	w.update()
 }
 
+func getUsername() string {
+	curUser, userErr := user.Current()
+	userName := "unknown"
+	if userErr == nil {
+		userName = curUser.Username
+	}
+
+	return userName
+}
+
+func getHostname() (string, string) {
+	hostName, hostErr := os.Hostname()
+	if hostErr != nil {
+		hostName = "unknown"
+	}
+
+	prettyName, _, prettyNameErr := execAndGetOutput("pretty-hostname")
+
+	if prettyNameErr == nil {
+		return hostName, prettyName
+	} else {
+		return hostName, hostName
+	}
+}
+
 ////////////////////////////////////////////
 // Widget: Time
 ////////////////////////////////////////////
@@ -319,12 +307,6 @@ func NewTimeWidget() *TimeWidget {
 	w.update()
 	w.resize()
 
-	// Also want to run an update right after things get rendered so we can use the width to right justify correctly
-	// TODO: This isn't working right, isn't being called correctly
-	time.AfterFunc(time.Second*1, func() {
-		w.update()
-	})
-
 	return w
 }
 
@@ -339,13 +321,24 @@ func (w *TimeWidget) update() {
 
 	timeStr := fmt.Sprintf("%v  Up: %v ", nowStr, uptimeStr)
 
-	//w.widget.Text = rightJustify(w.widget.Width, timeStr)
 	w.widget.Text = timeStr
 }
 
 func (w *TimeWidget) resize() {
 	// Update
 	w.update()
+}
+
+func getTime() (time.Time, *linuxproc.Uptime) {
+	now := time.Now().UTC()
+	uptime, err := linuxproc.ReadUptime("/proc/uptime")
+
+	if err != nil {
+		uptime = nil
+	}
+
+	return now, uptime
+
 }
 
 ////////////////////////////////////////////
@@ -434,6 +427,102 @@ func (w *KerberosWidget) setLastUpdated(t time.Time) {
 }
 
 ////////////////////////////////////////////
+// Widget: CPU
+////////////////////////////////////////////
+
+type CPUWidget struct {
+	widget *ui.LineChart
+
+	lastStat     linuxproc.CPUStat
+	curStat      linuxproc.CPUStat
+	cpuPercent   float64
+	loadLast1Min []float64
+	loadLast5Min []float64
+}
+
+func NewCPUWidget() *CPUWidget {
+	// Create base element
+	e := ui.NewLineChart()
+	e.Height = 20
+	e.Border = true
+
+	// Create widget
+	w := &CPUWidget{
+		widget:       e,
+		cpuPercent:   0,
+		loadLast1Min: make([]float64, 0),
+		loadLast5Min: make([]float64, 0),
+	}
+
+	w.update()
+	w.resize()
+
+	return w
+}
+
+func (w *CPUWidget) getGridWidget() ui.GridBufferer {
+	return w.widget
+}
+
+func (w *CPUWidget) update() {
+	w.loadProcessorStats()
+
+	w.widget.BorderLabel = fmt.Sprintf("CPU: %0.2f%%", w.cpuPercent*100)
+	w.widget.Data = w.loadLast1Min
+}
+
+func (w *CPUWidget) resize() {
+	// Update
+}
+
+func (w *CPUWidget) loadProcessorStats() {
+	// Read /proc/stat for the overall CPU percentage
+	stats, statErr := linuxproc.ReadStat("/proc/stat")
+
+	if statErr == nil {
+		// Save last two stats records
+		w.lastStat = w.curStat
+		w.curStat = stats.CPUStatAll
+
+		// Calculate usage percentage
+		// from: https://stackoverflow.com/a/23376195
+
+		prevIdle := w.lastStat.Idle + w.lastStat.IOWait
+		curIdle := w.curStat.Idle + w.curStat.IOWait
+
+		prevNonIdle := w.lastStat.User + w.lastStat.Nice + w.lastStat.System + w.lastStat.IRQ + w.lastStat.SoftIRQ + w.lastStat.Steal
+		curNonIdle := w.curStat.User + w.curStat.Nice + w.curStat.System + w.curStat.IRQ + w.curStat.SoftIRQ + w.curStat.Steal
+
+		prevTotal := prevIdle + prevNonIdle
+		curTotal := curIdle + curNonIdle
+
+		//  differentiate: actual value minus the previous one
+		totald := curTotal - prevTotal
+		idled := curIdle - prevIdle
+
+		w.cpuPercent = (float64(totald - idled)) / float64(totald)
+	}
+
+	// Read load average
+	loadavg, loadErr := linuxproc.ReadLoadAvg("/proc/loadavg")
+
+	if loadErr == nil {
+		// Record, keep a fixed number around
+		if len(w.loadLast1Min) > w.widget.Width {
+			w.loadLast1Min = append(w.loadLast1Min[1:], loadavg.Last1Min)
+		} else {
+			w.loadLast1Min = append(w.loadLast1Min, loadavg.Last1Min)
+		}
+
+		if len(w.loadLast5Min) > w.widget.Width {
+			w.loadLast5Min = append(w.loadLast5Min[1:], loadavg.Last5Min)
+		} else {
+			w.loadLast5Min = append(w.loadLast5Min, loadavg.Last5Min)
+		}
+	}
+}
+
+////////////////////////////////////////////
 // Where the real stuff happens
 ////////////////////////////////////////////
 
@@ -479,7 +568,7 @@ func main() {
 	disk := NewTempWidget("disk")
 	widgets = append(widgets, disk)
 
-	cpu := NewTempWidget("cpu")
+	cpu := NewCPUWidget()
 	widgets = append(widgets, cpu)
 
 	repo := NewTempWidget("repos")
@@ -514,10 +603,11 @@ func main() {
 			ui.NewCol(6, 0, kerberos.getGridWidget()),
 			ui.NewCol(6, 0, time.getGridWidget())),
 		ui.NewRow(
-			ui.NewCol(3, 0, network.getGridWidget()),
-			ui.NewCol(3, 0, disk.getGridWidget()),
-			ui.NewCol(3, 0, cpu.getGridWidget()),
-			ui.NewCol(3, 0, battAudio.getGridWidget())),
+			ui.NewCol(4, 0, network.getGridWidget()),
+			ui.NewCol(4, 0, disk.getGridWidget()),
+			ui.NewCol(4, 0, battAudio.getGridWidget())),
+		ui.NewRow(
+			ui.NewCol(12, 0, cpu.getGridWidget())),
 		ui.NewRow(
 			ui.NewCol(6, 0, repo.getGridWidget()),
 			ui.NewCol(6, 0, commits.getGridWidget())),
