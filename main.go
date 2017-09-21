@@ -42,6 +42,8 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -95,6 +97,12 @@ func rightJustify(width int, str string) string {
 	}
 
 	return rightJustify + str
+}
+
+var ANSI_REGEXP, ANSI_REGEXP_ERR = regexp.Compile(`\x1B\[(([0-9]{1,2})?(;)?([0-9]{1,2})?)?[m,K,H,f,J]`)
+
+func stripANSI(str string) string {
+	return ANSI_REGEXP.ReplaceAllLiteralString(str, "")
 }
 
 ////////////////////////////////////////////
@@ -345,7 +353,7 @@ func getTime() (time.Time, *linuxproc.Uptime) {
 // Widget: Kerberos
 ////////////////////////////////////////////
 
-const KerberosUpdateIntervalSeconds = 10
+const KerberosUpdateInterval = 10 * time.Second
 
 type KerberosWidget struct {
 	widget      *ui.Par
@@ -414,8 +422,7 @@ func (w *KerberosWidget) resize() {
 }
 
 func (w *KerberosWidget) getUpdateInterval() time.Duration {
-	// Update every 10 seconds
-	return time.Second * 5
+	return KerberosUpdateInterval
 }
 
 func (w *KerberosWidget) getLastUpdated() *time.Time {
@@ -523,10 +530,127 @@ func (w *CPUWidget) loadProcessorStats() {
 }
 
 ////////////////////////////////////////////
+// Widget: Battery
+////////////////////////////////////////////
+
+const BatteryUpdateIntervalSeconds = 10
+
+type BatteryWidget struct {
+	widget      *ui.Gauge
+	lastUpdated *time.Time
+}
+
+func NewBatteryWidget() *BatteryWidget {
+	// Create base element
+	e := ui.NewGauge()
+	e.Height = 3
+	e.Border = true
+
+	// Create widget
+	w := &BatteryWidget{
+		widget:      e,
+		lastUpdated: nil,
+	}
+
+	w.update()
+	w.resize()
+
+	return w
+}
+
+func (w *BatteryWidget) getGridWidget() ui.GridBufferer {
+	return w.widget
+}
+
+func (w *BatteryWidget) update() {
+	if shouldUpdate(w) {
+		// Load battery info
+		output, _, err := execAndGetOutput("ibam-battery-prompt", "-p")
+
+		if err == nil {
+			log.Printf("Output: %v", output)
+
+			// Parse the output
+			lines := strings.Split(output, "\n")
+			if len(lines) >= 4 {
+				// we have enough
+				timeLeft := stripANSI(lines[1])
+				isCharging, chargeErr := strconv.ParseBool(lines[2])
+				batteryPercent, percentErr := strconv.Atoi(lines[4])
+
+				if chargeErr != nil {
+					isCharging = false
+					log.Printf("Error reading charge status: '%v' -- %v", lines[2], chargeErr)
+				}
+
+				if percentErr != nil {
+					batteryPercent = 0
+					log.Printf("Error reading battery percent: '%v' -- %v", lines[4], chargeErr)
+				}
+
+				log.Printf("Battery Percent: %v, Is Charging: %v, Time Left: %v", batteryPercent, isCharging, timeLeft)
+
+				var battColor = ui.ColorBlue
+
+				if batteryPercent > 80 {
+					battColor = ui.ColorGreen
+				} else if batteryPercent > 20 {
+					battColor = ui.ColorMagenta
+				} else {
+					battColor = ui.ColorRed
+				}
+
+				if isCharging {
+					w.widget.BorderLabel = "Battery (charging)"
+					w.widget.BorderLabelFg = ui.ColorCyan + ui.AttrBold
+				} else {
+					w.widget.BorderLabel = "Battery"
+					w.widget.BorderLabelFg = battColor + ui.AttrBold
+				}
+
+				w.widget.Percent = batteryPercent
+				w.widget.BarColor = battColor + ui.AttrBold
+				w.widget.Label = fmt.Sprintf("%d%% (%s)", batteryPercent, timeLeft)
+				w.widget.LabelAlign = ui.AlignRight
+				w.widget.PercentColor = ui.ColorWhite + ui.AttrBold
+				//w.widget.PercentColorHighlighted = ui.ColorBlack
+				w.widget.PercentColorHighlighted = w.widget.PercentColor
+			} else {
+				log.Printf("Not enough lines from battery command!  Output: %v", output)
+			}
+		} else {
+			log.Printf("Error executing battery command: %v", err)
+		}
+	}
+}
+
+func (w *BatteryWidget) resize() {
+	// Do nothing
+}
+
+func (w *BatteryWidget) getUpdateInterval() time.Duration {
+	// Update every 10 seconds
+	return time.Second * 10
+}
+
+func (w *BatteryWidget) getLastUpdated() *time.Time {
+	return w.lastUpdated
+}
+
+func (w *BatteryWidget) setLastUpdated(t time.Time) {
+	w.lastUpdated = &t
+}
+
+////////////////////////////////////////////
 // Where the real stuff happens
 ////////////////////////////////////////////
 
 func main() {
+
+	if ANSI_REGEXP_ERR != nil {
+		panic(ANSI_REGEXP_ERR)
+	}
+
 	// Set up logging
 	logFile, logErr := os.OpenFile("go.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0660)
 	if logErr != nil {
@@ -562,8 +686,11 @@ func main() {
 	time := NewTimeWidget()
 	widgets = append(widgets, time)
 
-	battAudio := NewTempWidget("battery/audio")
-	widgets = append(widgets, battAudio)
+	battery := NewBatteryWidget()
+	widgets = append(widgets, battery)
+
+	audio := NewTempWidget("audio")
+	widgets = append(widgets, audio)
 
 	disk := NewTempWidget("disk")
 	widgets = append(widgets, disk)
@@ -603,9 +730,11 @@ func main() {
 			ui.NewCol(6, 0, kerberos.getGridWidget()),
 			ui.NewCol(6, 0, time.getGridWidget())),
 		ui.NewRow(
-			ui.NewCol(4, 0, network.getGridWidget()),
-			ui.NewCol(4, 0, disk.getGridWidget()),
-			ui.NewCol(4, 0, battAudio.getGridWidget())),
+			ui.NewCol(6, 0, network.getGridWidget()),
+			ui.NewCol(6, 0, disk.getGridWidget())),
+		ui.NewRow(
+			ui.NewCol(6, 0, battery.getGridWidget()),
+			ui.NewCol(6, 0, audio.getGridWidget())),
 		ui.NewRow(
 			ui.NewCol(12, 0, cpu.getGridWidget())),
 		ui.NewRow(
@@ -628,8 +757,6 @@ func main() {
 	//
 	//  Activate
 	//
-
-	log.Printf("Failed: %v", timerCounter)
 
 	render()
 
