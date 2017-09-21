@@ -568,8 +568,6 @@ func (w *BatteryWidget) update() {
 		output, _, err := execAndGetOutput("ibam-battery-prompt", "-p")
 
 		if err == nil {
-			log.Printf("Output: %v", output)
-
 			// Parse the output
 			lines := strings.Split(output, "\n")
 			if len(lines) >= 4 {
@@ -587,8 +585,6 @@ func (w *BatteryWidget) update() {
 					batteryPercent = 0
 					log.Printf("Error reading battery percent: '%v' -- %v", lines[4], chargeErr)
 				}
-
-				log.Printf("Battery Percent: %v, Is Charging: %v, Time Left: %v", batteryPercent, isCharging, timeLeft)
 
 				var battColor = ui.ColorBlue
 
