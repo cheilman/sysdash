@@ -336,10 +336,11 @@ func (w *TimeWidget) getGridWidget() ui.GridBufferer {
 
 func (w *TimeWidget) update() {
 	now, uptime := getTime()
-	nowStr := now.Local().Format(time.RFC1123Z)
+	//nowStr := now.Local().Format(time.RFC1123Z)
+	nowStr := now.Local().Format("2006/01/02 15:04:05 MST")
 	uptimeStr := uptime.GetTotalDuration()
 
-	timeStr := fmt.Sprintf("%v  Up: %v ", nowStr, uptimeStr)
+	timeStr := fmt.Sprintf("%v -- Up: %v ", nowStr, uptimeStr)
 
 	w.widget.Text = centerString(w.widget.Width, timeStr)
 }
