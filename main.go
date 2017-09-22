@@ -100,6 +100,17 @@ func rightJustify(width int, str string) string {
 	return rightJustify + str
 }
 
+func centerString(width int, str string) string {
+	start := (width / 2) - (utf8.RuneCountInString(str) / 2)
+	log.Printf("Width: %v, Str: '%v', Start: %v", width, str, start)
+
+	if start > 0 {
+		return fmt.Sprintf("%s%s", strings.Repeat(" ", start), str)
+	} else {
+		return str
+	}
+}
+
 var ANSI_REGEXP, ANSI_REGEXP_ERR = regexp.Compile(`\x1B\[(([0-9]{1,2})?(;)?([0-9]{1,2})?)?[m,K,H,f,J]`)
 
 func stripANSI(str string) string {
@@ -305,7 +316,7 @@ func NewTimeWidget() *TimeWidget {
 	e := ui.NewPar("Time")
 	e.Height = 1
 	e.Border = false
-	e.TextFgColor = ui.ColorGreen
+	e.TextFgColor = ui.ColorBlue + ui.AttrBold
 
 	// Create widget
 	w := &TimeWidget{
@@ -330,7 +341,7 @@ func (w *TimeWidget) update() {
 
 	timeStr := fmt.Sprintf("%v  Up: %v ", nowStr, uptimeStr)
 
-	w.widget.Text = timeStr
+	w.widget.Text = centerString(w.widget.Width, timeStr)
 }
 
 func (w *TimeWidget) resize() {
@@ -404,17 +415,21 @@ func (w *KerberosWidget) update() {
 		}
 
 		// Piece it all together
+		krbText := "Kerberos Ticket"
+
 		if hasTicket {
 			if hasTimeLeft {
-				w.widget.Text = fmt.Sprintf("Krb: OK (%v)", timeLeft)
+				krbText = fmt.Sprintf("Krb: OK (%v)", timeLeft)
 			} else {
-				w.widget.Text = fmt.Sprintf("Krb: OK")
+				krbText = fmt.Sprintf("Krb: OK")
 			}
 			w.widget.TextFgColor = ui.ColorGreen + ui.AttrBold
 		} else {
-			w.widget.Text = fmt.Sprintf("Krb: NO TICKET")
+			krbText = fmt.Sprintf("Krb: NO TICKET")
 			w.widget.TextFgColor = ui.ColorRed + ui.AttrBold
 		}
+
+		w.widget.Text = centerString(w.widget.Width, krbText)
 	}
 }
 
@@ -843,8 +858,8 @@ func main() {
 
 	ui.Body.AddRows(
 		ui.NewRow(
-			ui.NewCol(6, 0, kerberos.getGridWidget()),
-			ui.NewCol(6, 0, time.getGridWidget())),
+			ui.NewCol(8, 0, time.getGridWidget()),
+			ui.NewCol(4, 0, kerberos.getGridWidget())),
 		ui.NewRow(
 			ui.NewCol(6, 0, network.getGridWidget()),
 			ui.NewCol(6, 0, disk.getGridWidget())),
