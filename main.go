@@ -52,6 +52,7 @@ import (
 	linuxproc "github.com/c9s/goprocinfo/linux"
 	ui "github.com/gizak/termui"
 	"github.com/sqp/pulseaudio"
+	set "gopkg.in/fatih/set.v0"
 )
 
 var timerCounter uint64 = 0
@@ -451,6 +452,172 @@ func (w *KerberosWidget) setLastUpdated(t time.Time) {
 }
 
 ////////////////////////////////////////////
+// Widget: Disk
+////////////////////////////////////////////
+
+const DiskUpdateInterval = 30 * time.Second
+
+type DiskWidget struct {
+	widget      *ui.Par
+	lastUpdated *time.Time
+	lastUsage   []DiskUsage
+}
+
+type DiskUsage struct {
+	MountPoint           string
+	FSType               string
+	TotalSizeInBytes     uint64
+	AvailableSizeInBytes uint64
+	FreePercentage       float64
+	InodesInUse          uint64
+	TotalInodes          uint64
+	FreeInodesPercentage float64
+}
+
+var IgnoreFilesystemTypes = set.New(
+	"sysfs", "proc", "udev", "devpts", "tmpfs", "cgroup", "systemd-1",
+	"mqueue", "debugfs", "hugetlbfs", "fusectl", "tracefs", "binfmt_misc",
+	"devtmpfs", "securityfs", "pstore", "autofs", "fuse.jetbrains-toolbox",
+	"fuse.gvfsd-fuse")
+
+func NewDiskWidget() *DiskWidget {
+	// Create base element
+	e := ui.NewPar("Disk")
+	e.Height = 1
+	e.Border = false
+
+	// Create widget
+	w := &DiskWidget{
+		widget:      e,
+		lastUpdated: nil,
+	}
+
+	w.update()
+	w.resize()
+
+	return w
+}
+
+func (w *DiskWidget) getGridWidget() ui.GridBufferer {
+	return w.widget
+}
+
+func (w *DiskWidget) update() {
+	if shouldUpdate(w) {
+		w.lastUsage = loadDiskUsage()
+
+		log.Printf("DISK: %v", w.lastUsage)
+	}
+}
+
+func (w *DiskWidget) resize() {
+	// Do nothing
+}
+
+func (w *DiskWidget) getUpdateInterval() time.Duration {
+	return KerberosUpdateInterval
+}
+
+func (w *DiskWidget) getLastUpdated() *time.Time {
+	return w.lastUpdated
+}
+
+func (w *DiskWidget) setLastUpdated(t time.Time) {
+	w.lastUpdated = &t
+}
+
+func prettyPrintBytes(bytes uint64) string {
+	if bytes > (1024 * 1024 * 1024) {
+		gb := float64(bytes) / float64(1024*1024*1024)
+		return fmt.Sprintf("%0.2fG", gb)
+	} else if bytes > (1024 * 1024) {
+		mb := float64(bytes) / float64(1024*1024)
+		return fmt.Sprintf("%0.2fM", mb)
+	} else if bytes > (1024) {
+		kb := float64(bytes) / float64(1024)
+		return fmt.Sprintf("%0.2fK", kb)
+	} else {
+		return fmt.Sprintf("%dbytes", bytes)
+	}
+}
+
+func loadDiskUsage() []DiskUsage {
+	diskUsageData := make([]DiskUsage, 0)
+
+	// Load mount points
+	mounts, mountsErr := linuxproc.ReadMounts("/proc/mounts")
+
+	if mountsErr != nil {
+		log.Printf("Error loading mounts: %v", mountsErr)
+	} else {
+		for _, mnt := range mounts.Mounts {
+
+			if IgnoreFilesystemTypes.Has(mnt.FSType) {
+				// Skip it
+				continue
+			}
+
+			statfs := syscall.Statfs_t{}
+			statErr := syscall.Statfs(mnt.MountPoint, &statfs)
+
+			if statErr != nil {
+				log.Printf("Error statfs-ing mount: %v", mnt.MountPoint)
+			} else {
+				var totalBytes uint64 = 0
+				var availBytes uint64 = 0
+				var bytesFreePercent float64 = 0
+				var totalInodes uint64 = 0
+				var usedInodes uint64 = 0
+				var inodesFreePercent float64 = 0
+
+				var blocksize uint64 = 0
+				if statfs.Bsize > 0 {
+					blocksize = uint64(statfs.Bsize)
+				} else {
+					blocksize = 1 // bad guess
+					log.Printf("Bad block size: %v", statfs.Bsize)
+				}
+
+				totalBytes = statfs.Blocks * blocksize
+				availBytes = statfs.Bavail * blocksize
+				if totalBytes > 0 {
+					bytesFreePercent = float64(availBytes) / float64(totalBytes)
+					log.Printf("MOUNT: %v -- bytes: %v / %v (%0.2f%%)", mnt.MountPoint, prettyPrintBytes(availBytes), prettyPrintBytes(totalBytes), bytesFreePercent*100)
+				} else {
+					log.Printf("Bad total bytes: %v", totalBytes)
+				}
+
+				totalInodes = statfs.Files
+				usedInodes = statfs.Ffree
+				if totalInodes > 0 {
+					inodesFreePercent = float64(totalInodes-usedInodes) / float64(totalInodes)
+					log.Printf("MOUNT: %v -- inodes: %v / %v (%0.0f%%)", mnt.MountPoint, usedInodes, totalInodes, inodesFreePercent*100)
+				} else {
+					log.Printf("Bad total inodes: %v", totalInodes)
+				}
+
+				usage := DiskUsage{
+					MountPoint:           mnt.MountPoint,
+					FSType:               mnt.FSType,
+					TotalSizeInBytes:     totalBytes,
+					AvailableSizeInBytes: availBytes,
+					FreePercentage:       bytesFreePercent,
+					TotalInodes:          totalInodes,
+					InodesInUse:          usedInodes,
+					FreeInodesPercentage: inodesFreePercent,
+				}
+
+				log.Printf("MOUNT: %v -- %v", mnt.MountPoint, usage)
+
+				diskUsageData = append(diskUsageData, usage)
+			}
+		}
+	}
+
+	return diskUsageData
+}
+
+////////////////////////////////////////////
 // Widget: CPU
 ////////////////////////////////////////////
 
@@ -824,7 +991,7 @@ func main() {
 	audio := NewAudioWidget()
 	widgets = append(widgets, audio)
 
-	disk := NewTempWidget("disk")
+	disk := NewDiskWidget()
 	widgets = append(widgets, disk)
 
 	cpu := NewCPUWidget()
