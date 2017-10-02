@@ -603,6 +603,96 @@ func (w *KerberosWidget) setLastUpdated(t time.Time) {
 }
 
 ////////////////////////////////////////////
+// Widget: Host Information
+////////////////////////////////////////////
+
+type HostInfoWidget struct {
+	widget *ui.Par
+}
+
+func NewHostInfoWidget() *HostInfoWidget {
+	// Create base element
+	e := ui.NewPar("")
+	e.Height = 4
+	e.Border = true
+
+	// Create widget
+	w := &HostInfoWidget{
+		widget: e,
+	}
+
+	w.update()
+	w.resize()
+
+	return w
+}
+
+func (w *HostInfoWidget) getGridWidget() ui.GridBufferer {
+	return w.widget
+}
+
+func (w *HostInfoWidget) update() {
+	now, uptime := getTime()
+	krbText, krbAttr := getKerberosStatusString()
+
+	// Set time to label
+	w.widget.BorderLabel = now.Local().Format("2006/01/02 15:04:05 MST")
+	w.widget.PaddingLeft = 5
+
+	// Start building paragraph
+	w.widget.Text = ""
+
+	// Uptime
+	w.widget.Text += fmt.Sprintf("[Uptime](fg-cyan)..... [%v](fg-cyan,fg-bold)", uptime.GetTotalDuration())
+
+	// Kerberos
+	w.widget.Text += "\n"
+	w.widget.Text += fmt.Sprintf("[Kerberos](fg-cyan)... [%v](%v)", krbText, krbAttr)
+}
+
+func (w *HostInfoWidget) resize() {
+	// Do nothing
+}
+
+func getKerberosStatusString() (string, string) {
+	// Do we have a ticket?
+	_, exitCode, _ := execAndGetOutput("klist", "-s")
+
+	hasTicket := exitCode == 0
+
+	// Get the time left
+	timeLeftOutput, _, err := execAndGetOutput("kleft", "")
+	var hasTimeLeft = false
+	var timeLeft string
+
+	if err == nil {
+		timeLeftParts := strings.Split(timeLeftOutput, " ")
+		if len(timeLeftParts) > 1 {
+			hasTimeLeft = true
+			timeLeft = strings.TrimSpace(timeLeftParts[1])
+		}
+	}
+
+	// Piece it all together
+	krbText := "Kerberos Ticket"
+	krbAttrStr := ""
+
+	if hasTicket {
+		if hasTimeLeft {
+			krbText = fmt.Sprintf("OK (%v)", timeLeft)
+		} else {
+			krbText = fmt.Sprintf("OK")
+		}
+		krbAttrStr = "fg-green,fg-bold"
+	} else {
+		krbText = fmt.Sprintf("NO TICKET")
+		krbAttrStr = "fg-red,fg-bold"
+	}
+
+	return krbText, krbAttrStr
+}
+
+////////////////////////////////////////////
 // Widget: Disk
 ////////////////////////////////////////////
 
@@ -657,11 +747,11 @@ func (w *DiskColumn) update() {
 	log.Printf("Creating columns (%d)", len(gauges))
 	w.column.Cols = []*ui.Row{}
 	ir := w.column
-
-	log.Printf("Added row for widget %v", w.header)
-	nr := &ui.Row{Span: 12, Widget: w.header}
-	ir.Cols = []*ui.Row{nr}
-	ir = nr
+	//
+	//log.Printf("Added row for widget %v", w.header)
+	//nr := &ui.Row{Span: 12, Widget: w.header}
+	//ir.Cols = []*ui.Row{nr}
+	//ir = nr
 
 	for _, widget := range gauges {
 		log.Printf("Added row for widget %v", widget.BorderLabel)
@@ -1065,14 +1155,17 @@ func main() {
 	header := NewHeaderWidget()
 	widgets = append(widgets, header)
 
-	kerberos := NewKerberosWidget()
-	widgets = append(widgets, kerberos)
+	//kerberos := NewKerberosWidget()
+	//widgets = append(widgets, kerberos)
+
+	hostInfo := NewHostInfoWidget()
+	widgets = append(widgets, hostInfo)
 
 	network := NewTempWidget("network")
 	widgets = append(widgets, network)
 
-	time := NewTimeWidget()
-	widgets = append(widgets, time)
+	//timeWidget := NewTimeWidget()
+	//widgets = append(widgets, timeWidget)
 
 	battery := NewBatteryWidget()
 	widgets = append(widgets, battery)
@@ -1115,11 +1208,8 @@ func main() {
 
 	ui.Body.AddRows(
 		ui.NewRow(
-			ui.NewCol(8, 0, time.getGridWidget()),
-			ui.NewCol(4, 0, kerberos.getGridWidget())),
-		ui.NewRow(
 			disk.getColumn(),
-			ui.NewCol(6, 0, battery.getGridWidget(), audio.getGridWidget())),
+			ui.NewCol(6, 0, hostInfo.getGridWidget(), battery.getGridWidget(), audio.getGridWidget())),
 		ui.NewRow(
 			ui.NewCol(12, 0, cpu.getGridWidget())),
 		ui.NewRow(
