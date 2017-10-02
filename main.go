@@ -1118,11 +1118,8 @@ func main() {
 			ui.NewCol(8, 0, time.getGridWidget()),
 			ui.NewCol(4, 0, kerberos.getGridWidget())),
 		ui.NewRow(
-			ui.NewCol(6, 0, network.getGridWidget()),
-			disk.getColumn()),
-		ui.NewRow(
-			ui.NewCol(6, 0, battery.getGridWidget()),
-			ui.NewCol(6, 0, audio.getGridWidget())),
+			disk.getColumn(),
+			ui.NewCol(6, 0, battery.getGridWidget(), audio.getGridWidget())),
 		ui.NewRow(
 			ui.NewCol(12, 0, cpu.getGridWidget())),
 		ui.NewRow(
