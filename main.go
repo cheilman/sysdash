@@ -150,6 +150,96 @@ func execAndGetOutput(name string, args ...string) (stdout string, exitCode int,
 }
 
 ////////////////////////////////////////////
+// Widget: Combined Gauges
+////////////////////////////////////////////
+
+type GroupedGauges struct {
+	ui.Block
+	Surround *ui.Par
+	Gauges   []ui.Gauge
+}
+
+func (s *GroupedGauges) Add(sl ui.Gauge) {
+	s.Gauges = append(s.Gauges, sl)
+}
+
+func (s *GroupedGauges) Clear() {
+	s.Gauges = make([]ui.Gauge, 0)
+}
+
+func NewGroupedGauges(surruond *ui.Par, gs ...ui.Gauge) *GroupedGauges {
+	gg := &GroupedGauges{
+		Surround: surruond,
+		Block:    *ui.NewBlock(),
+		Gauges:   gs,
+	}
+	return gg
+}
+
+func (gg *GroupedGauges) update() {
+	for _, v := range gg.Gauges {
+		if v.Border {
+			v.Width = gg.Width - 4
+		} else {
+			v.Width = gg.Width - 2
+		}
+	}
+
+	// get how many lines gotta display
+	h := 0
+	for _, v := range gg.Gauges {
+		h += v.Height
+	}
+
+	if gg.Border {
+		gg.Height = h + 2
+	} else {
+		gg.Height = h
+	}
+
+	// Adjust subcomponent X/Y
+	startX := gg.X
+	startY := gg.Y
+
+	gg.Surround.X = startX
+	gg.Surround.Y = startY
+	gg.Surround.Width = gg.Width
+	gg.Surround.Height = gg.Height
+
+	if gg.Border {
+		startX += 1
+		startY += 1
+	}
+
+	for _, v := range gg.Gauges {
+		v.X = startX
+		v.Y = startY
+
+		startY += v.Height
+	}
+}
+
+// Buffer implements Bufferer interface.
+func (gg *GroupedGauges) Buffer() ui.Buffer {
+	gg.update()
+
+	retval := gg.Surround.Buffer()
+
+	for _, v := range gg.Gauges {
+		for dy := 0; dy < v.Height; dy++ {
+			for dx := 0; dx < v.Width; dx++ {
+				x := v.X + dx
+				y := v.Y + dy
+
+				retval.Set(x, y, v.Buffer().At(dx, dy))
+			}
+		}
+	}
+
+	return retval
+}
+
+////////////////////////////////////////////
 // Utility: Widgets
 ////////////////////////////////////////////
 
@@ -458,7 +548,7 @@ func (w *KerberosWidget) setLastUpdated(t time.Time) {
 const DiskUpdateInterval = 30 * time.Second
 
 type DiskWidget struct {
-	widget      *ui.Par
+	widget      *GroupedGauges
 	lastUpdated *time.Time
 	lastUsage   []DiskUsage
 }
@@ -482,13 +572,14 @@ var IgnoreFilesystemTypes = set.New(
 
 func NewDiskWidget() *DiskWidget {
 	// Create base element
-	e := ui.NewPar("Disk")
-	e.Height = 1
-	e.Border = false
+	surround := ui.NewPar("Disk")
+	surround.Border = true
+
+	gg := NewGroupedGauges(surround)
 
 	// Create widget
 	w := &DiskWidget{
-		widget:      e,
+		widget:      gg,
 		lastUpdated: nil,
 	}
 
@@ -507,6 +598,31 @@ func (w *DiskWidget) update() {
 		w.lastUsage = loadDiskUsage()
 
 		log.Printf("DISK: %v", w.lastUsage)
+
+		w.widget.Clear()
+
+		for _, d := range w.lastUsage {
+			free := int(100 * d.FreePercentage)
+			g := ui.NewGauge()
+			g.BorderLabel = d.MountPoint
+			g.Height = 3
+			g.Percent = free
+			g.Label = fmt.Sprintf("Free: %s/%s (%d%%)",
+				prettyPrintBytes(d.AvailableSizeInBytes), prettyPrintBytes(d.TotalSizeInBytes), free)
+			g.PercentColor = ui.ColorWhite + ui.AttrBold
+
+			if free < 15 {
+				g.BarColor = ui.ColorRed + ui.AttrBold
+			} else if free < 40 {
+				g.BarColor = ui.ColorYellow + ui.AttrBold
+			} else if free < 90 {
+				g.BarColor = ui.ColorGreen + ui.AttrBold
+			} else {
+				g.BarColor = ui.ColorCyan + ui.AttrBold
+			}
+
+			w.widget.Add(*g)
+		}
 	}
 }
 
@@ -553,6 +669,12 @@ func loadDiskUsage() []DiskUsage {
 		for _, mnt := range mounts.Mounts {
 
 			if IgnoreFilesystemTypes.Has(mnt.FSType) {
+				// Skip it
+				continue
+			}
+
+			// Also skip this docker fs, since it's a dup of root
+			if "/var/lib/docker/aufs" == mnt.MountPoint {
 				// Skip it
 				continue
 			}
