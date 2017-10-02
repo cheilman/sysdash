@@ -39,6 +39,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"os/user"
@@ -153,7 +154,7 @@ func percentToAttribute(value int, minValue int, maxValue int, invert bool) ui.A
 		} else if fvalue > 0.05*span {
 			return ui.ColorGreen + ui.AttrBold
 		} else {
-			return ui.ColorCyan + ui.AttrBold
+			return ui.ColorBlue + ui.AttrBold
 		}
 	} else {
 		// "good" is close to max and "bad" is closer to min
@@ -168,7 +169,7 @@ func percentToAttribute(value int, minValue int, maxValue int, invert bool) ui.A
 		} else if fvalue < 0.95*span {
 			return ui.ColorGreen + ui.AttrBold
 		} else {
-			return ui.ColorCyan + ui.AttrBold
+			return ui.ColorBlue + ui.AttrBold
 		}
 	}
 }
@@ -655,7 +656,7 @@ func NewHostInfoWidget() *HostInfoWidget {
 	e := ui.NewPar("")
 	e.Height = 5
 	e.Border = true
-	e.BorderFg = ui.ColorBlue + ui.AttrBold
+	e.BorderFg = ui.ColorCyan + ui.AttrBold
 
 	// Create widget
 	w := &HostInfoWidget{
@@ -681,11 +682,11 @@ func (w *HostInfoWidget) update() {
 	w.widget.PaddingLeft = 2
 
 	// Set time
-	w.widget.Text += fmt.Sprintf("[Time](fg-cyan)....... [%v](fg-green)", now.Local().Format("2006/01/02 15:04:05 MST"))
+	w.widget.Text += fmt.Sprintf("[Time](fg-cyan)....... [%v](fg-magenta)", now.Local().Format("2006/01/02 15:04:05 MST"))
 
 	// Uptime
 	w.widget.Text += "\n"
-	w.widget.Text += fmt.Sprintf("[Uptime](fg-cyan)..... [%v](fg-cyan,fg-bold)", uptime.GetTotalDuration())
+	w.widget.Text += fmt.Sprintf("[Uptime](fg-cyan)..... [%v](fg-green)", uptime.GetTotalDuration())
 
 	// Kerberos
 	w.widget.Text += "\n"
@@ -1164,6 +1165,77 @@ func (w *AudioWidget) resize() {
 }
 
 ////////////////////////////////////////////
+// Widget: Network
+////////////////////////////////////////////
+
+type NetworkWidget struct {
+	widget *ui.Par
+}
+
+func NewNetworkWidget() *NetworkWidget {
+	// Create base element
+	e := ui.NewPar("")
+	e.Height = 3
+	e.Border = true
+	e.BorderLabel = "Network"
+
+	// Create widget
+	w := &NetworkWidget{
+		widget: e,
+	}
+
+	w.update()
+	w.resize()
+
+	return w
+}
+
+func (w *NetworkWidget) getGridWidget() ui.GridBufferer {
+	return w.widget
+}
+
+func (w *NetworkWidget) update() {
+	w.widget.Text = ""
+	w.widget.Height = 2
+
+	// Getting addresses pulled from: https://stackoverflow.com/a/23558495/147354
+	ifaces, ifacesErr := net.Interfaces()
+
+	if ifacesErr != nil {
+		log.Printf("Error loading network interfaces: %v", ifacesErr)
+	} else {
+		for _, i := range ifaces {
+			addrs, addrsErr := i.Addrs()
+
+			if addrsErr != nil {
+				log.Printf("Failed to load addresses for interface '%v': %v", i, addrsErr)
+			} else {
+				for _, addr := range addrs {
+					var ip net.IP
+
+					switch v := addr.(type) {
+					case *net.IPNet:
+						ip = v.IP
+					case *net.IPAddr:
+						ip = v.IP
+					}
+
+					if w.widget.Text != "" {
+						w.widget.Text += "\n"
+					}
+					w.widget.Text += fmt.Sprintf("[%10v](fg-cyan): [%15v](fg-blue,fg-bold)", i.Name, ip.String())
+					w.widget.Height += 1
+				}
+			}
+		}
+	}
+}
+
+func (w *NetworkWidget) resize() {
+	// Do nothing
+}
+
+////////////////////////////////////////////
 // Where the real stuff happens
 ////////////////////////////////////////////
 
@@ -1202,7 +1274,7 @@ func main() {
 	hostInfo := NewHostInfoWidget()
 	widgets = append(widgets, hostInfo)
 
-	network := NewTempWidget("network")
+	network := NewNetworkWidget()
 	widgets = append(widgets, network)
 
 	battery := NewBatteryWidget()
@@ -1246,18 +1318,18 @@ func main() {
 
 	ui.Body.AddRows(
 		ui.NewRow(
-			ui.NewCol(6, 0, hostInfo.getGridWidget(), battery.getGridWidget(), audio.getGridWidget()),
-			disk.getColumn()),
+			ui.NewCol(6, 0, hostInfo.getGridWidget(), battery.getGridWidget(), audio.getGridWidget(), network.getGridWidget()),
+			ui.NewCol(6, 0, cpu.getGridWidget())),
 		ui.NewRow(
-			ui.NewCol(12, 0, cpu.getGridWidget())),
+			disk.getColumn(),
+			ui.NewCol(6, 0, weather.getGridWidget())),
 		ui.NewRow(
 			ui.NewCol(6, 0, repo.getGridWidget()),
 			ui.NewCol(6, 0, commits.getGridWidget())),
 		ui.NewRow(
-			ui.NewCol(3, 0, weather.getGridWidget()),
-			ui.NewCol(3, 0, twitter1.getGridWidget()),
-			ui.NewCol(3, 0, twitter2.getGridWidget()),
-			ui.NewCol(3, 0, twitter3.getGridWidget())))
+			ui.NewCol(4, 0, twitter1.getGridWidget()),
+			ui.NewCol(4, 0, twitter2.getGridWidget()),
+			ui.NewCol(4, 0, twitter3.getGridWidget())))
 
 	ui.Body.Align()
 
