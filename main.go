@@ -751,7 +751,7 @@ func NewDiskColumn(span int, offset int) *DiskColumn {
 
 	h := ui.NewPar(DiskHeaderText)
 	h.Border = false
-	h.TextFgColor = ui.ColorCyan + ui.AttrBold
+	h.TextFgColor = ui.ColorGreen
 	h.Height = 1
 
 	column := &DiskColumn{
@@ -774,8 +774,8 @@ func (w *DiskColumn) getColumn() *ui.Row {
 }
 
 func (w *DiskColumn) update() {
-	//w.header.Text = centerString(w.header.Width, DiskHeaderText)
-	w.header.Text = DiskHeaderText
+	w.header.Text = centerString(w.header.Width, DiskHeaderText)
+	//w.header.Text = DiskHeaderText
 
 	gauges := make([]*ui.Gauge, 0)
 
@@ -1199,17 +1199,11 @@ func main() {
 	header := NewHeaderWidget()
 	widgets = append(widgets, header)
 
-	//kerberos := NewKerberosWidget()
-	//widgets = append(widgets, kerberos)
-
 	hostInfo := NewHostInfoWidget()
 	widgets = append(widgets, hostInfo)
 
 	network := NewTempWidget("network")
 	widgets = append(widgets, network)
-
-	//timeWidget := NewTimeWidget()
-	//widgets = append(widgets, timeWidget)
 
 	battery := NewBatteryWidget()
 	widgets = append(widgets, battery)
@@ -1252,8 +1246,8 @@ func main() {
 
 	ui.Body.AddRows(
 		ui.NewRow(
-			disk.getColumn(),
-			ui.NewCol(6, 0, hostInfo.getGridWidget(), battery.getGridWidget(), audio.getGridWidget())),
+			ui.NewCol(6, 0, hostInfo.getGridWidget(), battery.getGridWidget(), audio.getGridWidget()),
+			disk.getColumn()),
 		ui.NewRow(
 			ui.NewCol(12, 0, cpu.getGridWidget())),
 		ui.NewRow(
