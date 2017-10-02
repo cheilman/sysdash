@@ -134,6 +134,45 @@ func prettyPrintBytes(bytes uint64) string {
 	}
 }
 
+// Colors according to where value is in the min/max range
+func percentToAttribute(value int, minValue int, maxValue int, invert bool) ui.Attribute {
+	span := float64(maxValue - minValue)
+	fvalue := float64(value)
+
+	// If invert is set...
+	if invert {
+		// "good" is close to min and "bad" is closer to max
+		if fvalue > 0.90*span {
+			return ui.ColorRed + ui.AttrBold
+		} else if fvalue > 0.75*span {
+			return ui.ColorRed
+		} else if fvalue > 0.50*span {
+			return ui.ColorYellow + ui.AttrBold
+		} else if fvalue > 0.25*span {
+			return ui.ColorGreen
+		} else if fvalue > 0.05*span {
+			return ui.ColorGreen + ui.AttrBold
+		} else {
+			return ui.ColorCyan + ui.AttrBold
+		}
+	} else {
+		// "good" is close to max and "bad" is closer to min
+		if fvalue < 0.10*span {
+			return ui.ColorRed + ui.AttrBold
+		} else if fvalue < 0.25*span {
+			return ui.ColorRed
+		} else if fvalue < 0.50*span {
+			return ui.ColorYellow + ui.AttrBold
+		} else if fvalue < 0.75*span {
+			return ui.ColorGreen
+		} else if fvalue < 0.95*span {
+			return ui.ColorGreen + ui.AttrBold
+		} else {
+			return ui.ColorCyan + ui.AttrBold
+		}
+	}
+}
+
 ////////////////////////////////////////////
 // Utility: Data gathering
 ////////////////////////////////////////////
@@ -382,6 +421,7 @@ type HeaderWidget struct {
 func NewHeaderWidget() *HeaderWidget {
 	// Create base element
 	e := ui.NewPar("")
+	e.BorderFg = ui.ColorCyan + ui.AttrBold
 
 	// Static information
 	userName := getUsername()
@@ -613,8 +653,9 @@ type HostInfoWidget struct {
 func NewHostInfoWidget() *HostInfoWidget {
 	// Create base element
 	e := ui.NewPar("")
-	e.Height = 4
+	e.Height = 5
 	e.Border = true
+	e.BorderFg = ui.ColorBlue + ui.AttrBold
 
 	// Create widget
 	w := &HostInfoWidget{
@@ -635,14 +676,15 @@ func (w *HostInfoWidget) update() {
 	now, uptime := getTime()
 	krbText, krbAttr := getKerberosStatusString()
 
-	// Set time to label
-	w.widget.BorderLabel = now.Local().Format("2006/01/02 15:04:05 MST")
-	w.widget.PaddingLeft = 5
-
 	// Start building paragraph
 	w.widget.Text = ""
+	w.widget.PaddingLeft = 2
+
+	// Set time
+	w.widget.Text += fmt.Sprintf("[Time](fg-cyan)....... [%v](fg-green)", now.Local().Format("2006/01/02 15:04:05 MST"))
 
 	// Uptime
+	w.widget.Text += "\n"
 	w.widget.Text += fmt.Sprintf("[Uptime](fg-cyan)..... [%v](fg-cyan,fg-bold)", uptime.GetTotalDuration())
 
 	// Kerberos
@@ -747,11 +789,11 @@ func (w *DiskColumn) update() {
 	log.Printf("Creating columns (%d)", len(gauges))
 	w.column.Cols = []*ui.Row{}
 	ir := w.column
-	//
-	//log.Printf("Added row for widget %v", w.header)
-	//nr := &ui.Row{Span: 12, Widget: w.header}
-	//ir.Cols = []*ui.Row{nr}
-	//ir = nr
+
+	log.Printf("Added row for widget %v", w.header)
+	nr := &ui.Row{Span: 12, Widget: w.header}
+	ir.Cols = []*ui.Row{nr}
+	ir = nr
 
 	for _, widget := range gauges {
 		log.Printf("Added row for widget %v", widget.BorderLabel)
@@ -777,15 +819,7 @@ func NewDiskGauge(usage DiskUsage) *ui.Gauge {
 		prettyPrintBytes(usage.AvailableSizeInBytes), prettyPrintBytes(usage.TotalSizeInBytes), free)
 	g.PercentColor = ui.ColorWhite + ui.AttrBold
 
-	if free < 15 {
-		g.BarColor = ui.ColorRed + ui.AttrBold
-	} else if free < 40 {
-		g.BarColor = ui.ColorYellow + ui.AttrBold
-	} else if free < 90 {
-		g.BarColor = ui.ColorGreen + ui.AttrBold
-	} else {
-		g.BarColor = ui.ColorCyan + ui.AttrBold
-	}
+	g.BarColor = percentToAttribute(free, 0, 100, false)
 
 	return g
 }
@@ -803,11 +837,14 @@ func (a ByMountPoint) Less(i, j int) bool { return a[i].BorderLabel < a[j].Borde
 type CPUWidget struct {
 	widget *ui.LineChart
 
-	lastStat     linuxproc.CPUStat
-	curStat      linuxproc.CPUStat
-	cpuPercent   float64
-	loadLast1Min []float64
-	loadLast5Min []float64
+	numProcessors      int
+	lastStat           linuxproc.CPUStat
+	curStat            linuxproc.CPUStat
+	cpuPercent         float64
+	loadLast1Min       []float64
+	loadLast5Min       []float64
+	mostRecent1MinLoad float64
+	mostRecent5MinLoad float64
 }
 
 func NewCPUWidget() *CPUWidget {
@@ -815,6 +852,9 @@ func NewCPUWidget() *CPUWidget {
 	e := ui.NewLineChart()
 	e.Height = 20
 	e.Border = true
+	e.PaddingTop = 1
+	e.LineColor = ui.ColorBlue + ui.AttrBold
+	e.AxesColor = ui.ColorYellow
 
 	// Create widget
 	w := &CPUWidget{
@@ -837,8 +877,16 @@ func (w *CPUWidget) getGridWidget() ui.GridBufferer {
 func (w *CPUWidget) update() {
 	w.loadProcessorStats()
 
-	w.widget.BorderLabel = fmt.Sprintf("CPU: %0.2f%%", w.cpuPercent*100)
+	w.widget.BorderLabel = fmt.Sprintf("CPU: %0.2f%% -- 5m Load: %0.2f", w.cpuPercent*100, w.mostRecent5MinLoad)
 	w.widget.Data = w.loadLast1Min
+
+	// Adjust border color by CPU Percentage
+	w.widget.BorderLabelFg = percentToAttribute(int(100.0*w.cpuPercent), 0, 100, true)
+
+	// Adjust graph axes color by Load value (never bold)
+	loadPercent := float64(w.mostRecent5MinLoad) / float64(w.numProcessors)
+	w.widget.AxesColor = percentToAttribute(int(100.0*loadPercent), 0, 100, true) - ui.AttrBold
+
 }
 
 func (w *CPUWidget) resize() {
@@ -853,6 +901,7 @@ func (w *CPUWidget) loadProcessorStats() {
 		// Save last two stats records
 		w.lastStat = w.curStat
 		w.curStat = stats.CPUStatAll
+		w.numProcessors = len(stats.CPUStats)
 
 		// Calculate usage percentage
 		// from: https://stackoverflow.com/a/23376195
@@ -877,6 +926,9 @@ func (w *CPUWidget) loadProcessorStats() {
 	loadavg, loadErr := linuxproc.ReadLoadAvg("/proc/loadavg")
 
 	if loadErr == nil {
+		w.mostRecent1MinLoad = loadavg.Last1Min
+		w.mostRecent5MinLoad = loadavg.Last5Min
+
 		// Record, keep a fixed number around
 		if len(w.loadLast1Min) > w.widget.Width {
 			w.loadLast1Min = append(w.loadLast1Min[1:], loadavg.Last1Min)
@@ -949,26 +1001,18 @@ func (w *BatteryWidget) update() {
 					log.Printf("Error reading battery percent: '%v' -- %v", lines[4], chargeErr)
 				}
 
-				var battColor = ui.ColorBlue
-
-				if batteryPercent > 80 {
-					battColor = ui.ColorGreen
-				} else if batteryPercent > 20 {
-					battColor = ui.ColorMagenta
-				} else {
-					battColor = ui.ColorRed
-				}
+				battColor := percentToAttribute(batteryPercent, 0, 100, false)
 
 				if isCharging {
 					w.widget.BorderLabel = "Battery (charging)"
 					w.widget.BorderLabelFg = ui.ColorCyan + ui.AttrBold
 				} else {
 					w.widget.BorderLabel = "Battery"
-					w.widget.BorderLabelFg = battColor + ui.AttrBold
+					w.widget.BorderLabelFg = battColor
 				}
 
 				w.widget.Percent = batteryPercent
-				w.widget.BarColor = battColor + ui.AttrBold
+				w.widget.BarColor = battColor
 				w.widget.Label = fmt.Sprintf("%d%% (%s)", batteryPercent, timeLeft)
 				w.widget.LabelAlign = ui.AlignRight
 				w.widget.PercentColor = ui.ColorWhite + ui.AttrBold
