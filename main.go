@@ -43,6 +43,7 @@ import (
 	"os/exec"
 	"os/user"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -118,6 +119,21 @@ func stripANSI(str string) string {
 	return ANSI_REGEXP.ReplaceAllLiteralString(str, "")
 }
 
+func prettyPrintBytes(bytes uint64) string {
+	if bytes > (1024 * 1024 * 1024) {
+		gb := float64(bytes) / float64(1024*1024*1024)
+		return fmt.Sprintf("%0.2fG", gb)
+	} else if bytes > (1024 * 1024) {
+		mb := float64(bytes) / float64(1024*1024)
+		return fmt.Sprintf("%0.2fM", mb)
+	} else if bytes > (1024) {
+		kb := float64(bytes) / float64(1024)
+		return fmt.Sprintf("%0.2fK", kb)
+	} else {
+		return fmt.Sprintf("%dbytes", bytes)
+	}
+}
+
 ////////////////////////////////////////////
 // Utility: Data gathering
 ////////////////////////////////////////////
@@ -149,95 +165,140 @@ func execAndGetOutput(name string, args ...string) (stdout string, exitCode int,
 	return
 }
 
-////////////////////////////////////////////
-// Widget: Combined Gauges
-////////////////////////////////////////////
-
-type GroupedGauges struct {
-	ui.Block
-	Surround *ui.Par
-	Gauges   []ui.Gauge
+type DiskUsage struct {
+	MountPoint           string
+	FSType               string
+	TotalSizeInBytes     uint64
+	AvailableSizeInBytes uint64
+	FreePercentage       float64
+	InodesInUse          uint64
+	TotalInodes          uint64
+	FreeInodesPercentage float64
 }
 
-func (s *GroupedGauges) Add(sl ui.Gauge) {
-	s.Gauges = append(s.Gauges, sl)
-}
+var IgnoreFilesystemTypes = set.New(
+	"sysfs", "proc", "udev", "devpts", "tmpfs", "cgroup", "systemd-1",
+	"mqueue", "debugfs", "hugetlbfs", "fusectl", "tracefs", "binfmt_misc",
+	"devtmpfs", "securityfs", "pstore", "autofs", "fuse.jetbrains-toolbox",
+	"fuse.gvfsd-fuse")
 
-func (s *GroupedGauges) Clear() {
-	s.Gauges = make([]ui.Gauge, 0)
-}
+func loadDiskUsage() map[string]DiskUsage {
+	diskUsageData := make(map[string]DiskUsage, 0)
 
-func NewGroupedGauges(surruond *ui.Par, gs ...ui.Gauge) *GroupedGauges {
-	gg := &GroupedGauges{
-		Surround: surruond,
-		Block:    *ui.NewBlock(),
-		Gauges:   gs,
-	}
-	return gg
-}
+	// Load mount points
+	mounts, mountsErr := linuxproc.ReadMounts("/proc/mounts")
 
-func (gg *GroupedGauges) update() {
-	for _, v := range gg.Gauges {
-		if v.Border {
-			v.Width = gg.Width - 4
-		} else {
-			v.Width = gg.Width - 2
-		}
-	}
-
-	// get how many lines gotta display
-	h := 0
-	for _, v := range gg.Gauges {
-		h += v.Height
-	}
-
-	if gg.Border {
-		gg.Height = h + 2
+	if mountsErr != nil {
+		log.Printf("Error loading mounts: %v", mountsErr)
 	} else {
-		gg.Height = h
-	}
+		for _, mnt := range mounts.Mounts {
 
-	// Adjust subcomponent X/Y
-	startX := gg.X
-	startY := gg.Y
+			if IgnoreFilesystemTypes.Has(mnt.FSType) {
+				// Skip it
+				continue
+			}
 
-	gg.Surround.X = startX
-	gg.Surround.Y = startY
-	gg.Surround.Width = gg.Width
-	gg.Surround.Height = gg.Height
+			// Also skip this docker fs, since it's a dup of root
+			if "/var/lib/docker/aufs" == mnt.MountPoint {
+				// Skip it
+				continue
+			}
 
-	if gg.Border {
-		startX += 1
-		startY += 1
-	}
+			statfs := syscall.Statfs_t{}
+			statErr := syscall.Statfs(mnt.MountPoint, &statfs)
 
-	for _, v := range gg.Gauges {
-		v.X = startX
-		v.Y = startY
+			if statErr != nil {
+				log.Printf("Error statfs-ing mount: %v", mnt.MountPoint)
+			} else {
+				var totalBytes uint64 = 0
+				var availBytes uint64 = 0
+				var bytesFreePercent float64 = 0
+				var totalInodes uint64 = 0
+				var usedInodes uint64 = 0
+				var inodesFreePercent float64 = 0
 
-		startY += v.Height
-	}
-}
+				var blocksize uint64 = 0
+				if statfs.Bsize > 0 {
+					blocksize = uint64(statfs.Bsize)
+				} else {
+					blocksize = 1 // bad guess
+					log.Printf("Bad block size: %v", statfs.Bsize)
+				}
 
-// Buffer implements Bufferer interface.
-func (gg *GroupedGauges) Buffer() ui.Buffer {
-	gg.update()
+				totalBytes = statfs.Blocks * blocksize
+				availBytes = statfs.Bavail * blocksize
+				if totalBytes > 0 {
+					bytesFreePercent = float64(availBytes) / float64(totalBytes)
+					log.Printf("MOUNT: %v -- bytes: %v / %v (%0.2f%%)", mnt.MountPoint, prettyPrintBytes(availBytes), prettyPrintBytes(totalBytes), bytesFreePercent*100)
+				} else {
+					log.Printf("Bad total bytes: %v", totalBytes)
+				}
 
-	retval := gg.Surround.Buffer()
+				totalInodes = statfs.Files
+				usedInodes = statfs.Ffree
+				if totalInodes > 0 {
+					inodesFreePercent = float64(totalInodes-usedInodes) / float64(totalInodes)
+					log.Printf("MOUNT: %v -- inodes: %v / %v (%0.0f%%)", mnt.MountPoint, usedInodes, totalInodes, inodesFreePercent*100)
+				} else {
+					log.Printf("Bad total inodes: %v", totalInodes)
+				}
 
-	for _, v := range gg.Gauges {
-		for dy := 0; dy < v.Height; dy++ {
-			for dx := 0; dx < v.Width; dx++ {
-				x := v.X + dx
-				y := v.Y + dy
+				usage := DiskUsage{
+					MountPoint:           mnt.MountPoint,
+					FSType:               mnt.FSType,
+					TotalSizeInBytes:     totalBytes,
+					AvailableSizeInBytes: availBytes,
+					FreePercentage:       bytesFreePercent,
+					TotalInodes:          totalInodes,
+					InodesInUse:          usedInodes,
+					FreeInodesPercentage: inodesFreePercent,
+				}
 
-				retval.Set(x, y, v.Buffer().At(dx, dy))
+				log.Printf("MOUNT: %v -- %v", mnt.MountPoint, usage)
+
+				diskUsageData[mnt.MountPoint] = usage
 			}
 		}
 	}
 
-	return retval
+	return diskUsageData
 }
+
+const DiskUsageUpdateInterval = 30 * time.Second
+
+type CachedDiskUsage struct {
+	LastUsage   map[string]DiskUsage
+	lastUpdated *time.Time
+}
+
+func (w *CachedDiskUsage) getUpdateInterval() time.Duration {
+	return KerberosUpdateInterval
+}
+
+func (w *CachedDiskUsage) getLastUpdated() *time.Time {
+	return w.lastUpdated
+}
+
+func (w *CachedDiskUsage) setLastUpdated(t time.Time) {
+	w.lastUpdated = &t
+}
+
+func (w *CachedDiskUsage) update() {
+	if shouldUpdate(w) {
+		w.LastUsage = loadDiskUsage()
+	}
+}
+
+func NewCachedDiskUsage() *CachedDiskUsage {
+	// Build it
+	w := &CachedDiskUsage{}
+
+	w.update()
+
+	return w
+}
+
+var cachedDiskUsage = NewCachedDiskUsage()
 
 ////////////////////////////////////////////
 // Utility: Widgets
@@ -545,199 +606,105 @@ func (w *KerberosWidget) setLastUpdated(t time.Time) {
 // Widget: Disk
 ////////////////////////////////////////////
 
-const DiskUpdateInterval = 30 * time.Second
+const DiskHeaderText = "--- Disks ---"
 
-type DiskWidget struct {
-	widget      *GroupedGauges
-	lastUpdated *time.Time
-	lastUsage   []DiskUsage
+type DiskColumn struct {
+	column  *ui.Row
+	header  *ui.Par
+	widgets []*ui.Gauge
 }
 
-type DiskUsage struct {
-	MountPoint           string
-	FSType               string
-	TotalSizeInBytes     uint64
-	AvailableSizeInBytes uint64
-	FreePercentage       float64
-	InodesInUse          uint64
-	TotalInodes          uint64
-	FreeInodesPercentage float64
-}
+func NewDiskColumn(span int, offset int) *DiskColumn {
+	c := ui.NewCol(span, offset)
 
-var IgnoreFilesystemTypes = set.New(
-	"sysfs", "proc", "udev", "devpts", "tmpfs", "cgroup", "systemd-1",
-	"mqueue", "debugfs", "hugetlbfs", "fusectl", "tracefs", "binfmt_misc",
-	"devtmpfs", "securityfs", "pstore", "autofs", "fuse.jetbrains-toolbox",
-	"fuse.gvfsd-fuse")
+	h := ui.NewPar(DiskHeaderText)
+	h.Border = false
+	h.TextFgColor = ui.ColorCyan + ui.AttrBold
+	h.Height = 1
 
-func NewDiskWidget() *DiskWidget {
-	// Create base element
-	surround := ui.NewPar("Disk")
-	surround.Border = true
-
-	gg := NewGroupedGauges(surround)
-
-	// Create widget
-	w := &DiskWidget{
-		widget:      gg,
-		lastUpdated: nil,
+	column := &DiskColumn{
+		column:  c,
+		header:  h,
+		widgets: make([]*ui.Gauge, 0),
 	}
 
-	w.update()
-	w.resize()
+	column.update()
 
-	return w
+	return column
 }
 
-func (w *DiskWidget) getGridWidget() ui.GridBufferer {
-	return w.widget
+func (w *DiskColumn) getGridWidget() ui.GridBufferer {
+	return w.column
 }
 
-func (w *DiskWidget) update() {
-	if shouldUpdate(w) {
-		w.lastUsage = loadDiskUsage()
+func (w *DiskColumn) getColumn() *ui.Row {
+	return w.column
+}
 
-		log.Printf("DISK: %v", w.lastUsage)
+func (w *DiskColumn) update() {
+	//w.header.Text = centerString(w.header.Width, DiskHeaderText)
+	w.header.Text = DiskHeaderText
 
-		w.widget.Clear()
+	gauges := make([]*ui.Gauge, 0)
 
-		for _, d := range w.lastUsage {
-			free := int(100 * d.FreePercentage)
-			g := ui.NewGauge()
-			g.BorderLabel = d.MountPoint
-			g.Height = 3
-			g.Percent = free
-			g.Label = fmt.Sprintf("Free: %s/%s (%d%%)",
-				prettyPrintBytes(d.AvailableSizeInBytes), prettyPrintBytes(d.TotalSizeInBytes), free)
-			g.PercentColor = ui.ColorWhite + ui.AttrBold
+	for _, d := range cachedDiskUsage.LastUsage {
+		log.Printf("Appending new gauge for: %v", d)
+		gauges = append(gauges, NewDiskGauge(d))
+	}
 
-			if free < 15 {
-				g.BarColor = ui.ColorRed + ui.AttrBold
-			} else if free < 40 {
-				g.BarColor = ui.ColorYellow + ui.AttrBold
-			} else if free < 90 {
-				g.BarColor = ui.ColorGreen + ui.AttrBold
-			} else {
-				g.BarColor = ui.ColorCyan + ui.AttrBold
-			}
+	sort.Sort(ByMountPoint(w.widgets))
 
-			w.widget.Add(*g)
-		}
+	log.Printf("Creating columns (%d)", len(gauges))
+	w.column.Cols = []*ui.Row{}
+	ir := w.column
+
+	log.Printf("Added row for widget %v", w.header)
+	nr := &ui.Row{Span: 12, Widget: w.header}
+	ir.Cols = []*ui.Row{nr}
+	ir = nr
+
+	for _, widget := range gauges {
+		log.Printf("Added row for widget %v", widget.BorderLabel)
+		nr := &ui.Row{Span: 12, Widget: widget}
+		ir.Cols = []*ui.Row{nr}
+		ir = nr
 	}
 }
 
-func (w *DiskWidget) resize() {
+func (w *DiskColumn) resize() {
 	// Do nothing
 }
 
-func (w *DiskWidget) getUpdateInterval() time.Duration {
-	return KerberosUpdateInterval
-}
+func NewDiskGauge(usage DiskUsage) *ui.Gauge {
+	log.Printf("DISK: %v -- %v", usage.MountPoint, usage)
 
-func (w *DiskWidget) getLastUpdated() *time.Time {
-	return w.lastUpdated
-}
+	free := int(100 * usage.FreePercentage)
+	g := ui.NewGauge()
+	g.BorderLabel = usage.MountPoint
+	g.Height = 3
+	g.Percent = free
+	g.Label = fmt.Sprintf("Free: %s/%s (%d%%)",
+		prettyPrintBytes(usage.AvailableSizeInBytes), prettyPrintBytes(usage.TotalSizeInBytes), free)
+	g.PercentColor = ui.ColorWhite + ui.AttrBold
 
-func (w *DiskWidget) setLastUpdated(t time.Time) {
-	w.lastUpdated = &t
-}
-
-func prettyPrintBytes(bytes uint64) string {
-	if bytes > (1024 * 1024 * 1024) {
-		gb := float64(bytes) / float64(1024*1024*1024)
-		return fmt.Sprintf("%0.2fG", gb)
-	} else if bytes > (1024 * 1024) {
-		mb := float64(bytes) / float64(1024*1024)
-		return fmt.Sprintf("%0.2fM", mb)
-	} else if bytes > (1024) {
-		kb := float64(bytes) / float64(1024)
-		return fmt.Sprintf("%0.2fK", kb)
+	if free < 15 {
+		g.BarColor = ui.ColorRed + ui.AttrBold
+	} else if free < 40 {
+		g.BarColor = ui.ColorYellow + ui.AttrBold
+	} else if free < 90 {
+		g.BarColor = ui.ColorGreen + ui.AttrBold
 	} else {
-		return fmt.Sprintf("%dbytes", bytes)
-	}
-}
-
-func loadDiskUsage() []DiskUsage {
-	diskUsageData := make([]DiskUsage, 0)
-
-	// Load mount points
-	mounts, mountsErr := linuxproc.ReadMounts("/proc/mounts")
-
-	if mountsErr != nil {
-		log.Printf("Error loading mounts: %v", mountsErr)
-	} else {
-		for _, mnt := range mounts.Mounts {
-
-			if IgnoreFilesystemTypes.Has(mnt.FSType) {
-				// Skip it
-				continue
-			}
-
-			// Also skip this docker fs, since it's a dup of root
-			if "/var/lib/docker/aufs" == mnt.MountPoint {
-				// Skip it
-				continue
-			}
-
-			statfs := syscall.Statfs_t{}
-			statErr := syscall.Statfs(mnt.MountPoint, &statfs)
-
-			if statErr != nil {
-				log.Printf("Error statfs-ing mount: %v", mnt.MountPoint)
-			} else {
-				var totalBytes uint64 = 0
-				var availBytes uint64 = 0
-				var bytesFreePercent float64 = 0
-				var totalInodes uint64 = 0
-				var usedInodes uint64 = 0
-				var inodesFreePercent float64 = 0
-
-				var blocksize uint64 = 0
-				if statfs.Bsize > 0 {
-					blocksize = uint64(statfs.Bsize)
-				} else {
-					blocksize = 1 // bad guess
-					log.Printf("Bad block size: %v", statfs.Bsize)
-				}
-
-				totalBytes = statfs.Blocks * blocksize
-				availBytes = statfs.Bavail * blocksize
-				if totalBytes > 0 {
-					bytesFreePercent = float64(availBytes) / float64(totalBytes)
-					log.Printf("MOUNT: %v -- bytes: %v / %v (%0.2f%%)", mnt.MountPoint, prettyPrintBytes(availBytes), prettyPrintBytes(totalBytes), bytesFreePercent*100)
-				} else {
-					log.Printf("Bad total bytes: %v", totalBytes)
-				}
-
-				totalInodes = statfs.Files
-				usedInodes = statfs.Ffree
-				if totalInodes > 0 {
-					inodesFreePercent = float64(totalInodes-usedInodes) / float64(totalInodes)
-					log.Printf("MOUNT: %v -- inodes: %v / %v (%0.0f%%)", mnt.MountPoint, usedInodes, totalInodes, inodesFreePercent*100)
-				} else {
-					log.Printf("Bad total inodes: %v", totalInodes)
-				}
-
-				usage := DiskUsage{
-					MountPoint:           mnt.MountPoint,
-					FSType:               mnt.FSType,
-					TotalSizeInBytes:     totalBytes,
-					AvailableSizeInBytes: availBytes,
-					FreePercentage:       bytesFreePercent,
-					TotalInodes:          totalInodes,
-					InodesInUse:          usedInodes,
-					FreeInodesPercentage: inodesFreePercent,
-				}
-
-				log.Printf("MOUNT: %v -- %v", mnt.MountPoint, usage)
-
-				diskUsageData = append(diskUsageData, usage)
-			}
-		}
+		g.BarColor = ui.ColorCyan + ui.AttrBold
 	}
 
-	return diskUsageData
+	return g
 }
+
+type ByMountPoint []*ui.Gauge
+
+func (a ByMountPoint) Len() int           { return len(a) }
+func (a ByMountPoint) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByMountPoint) Less(i, j int) bool { return a[i].BorderLabel < a[j].BorderLabel }
 
 ////////////////////////////////////////////
 // Widget: CPU
@@ -1113,7 +1080,7 @@ func main() {
 	audio := NewAudioWidget()
 	widgets = append(widgets, audio)
 
-	disk := NewDiskWidget()
+	disk := NewDiskColumn(6, 0)
 	widgets = append(widgets, disk)
 
 	cpu := NewCPUWidget()
@@ -1152,7 +1119,7 @@ func main() {
 			ui.NewCol(4, 0, kerberos.getGridWidget())),
 		ui.NewRow(
 			ui.NewCol(6, 0, network.getGridWidget()),
-			ui.NewCol(6, 0, disk.getGridWidget())),
+			disk.getColumn()),
 		ui.NewRow(
 			ui.NewCol(6, 0, battery.getGridWidget()),
 			ui.NewCol(6, 0, audio.getGridWidget())),
