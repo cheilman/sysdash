@@ -503,8 +503,8 @@ func NewRepoInfo(fullPath string) RepoInfo {
 	}
 
 	// Load repo status
-	branches := ""
-	status := ""
+	branches := "my branches"
+	status := "my status"
 
 	// Build it
 	r := RepoInfo{
@@ -791,7 +791,7 @@ func NewHostInfoWidget() *HostInfoWidget {
 	e := ui.NewList()
 	e.Height = 5
 	e.Border = true
-	e.BorderFg = ui.ColorCyan + ui.AttrBold
+	e.BorderFg = ui.ColorBlue + ui.AttrBold
 
 	// Create widget
 	w := &HostInfoWidget{
@@ -1424,7 +1424,7 @@ func (w *GitRepoWidget) update() {
 		pathPad := maxRepoWidth - len(repo.Name)
 		path := filepath.Dir(repo.HomePath)
 
-		name := fmt.Sprintf("[%*v%c](fg-white)[%v](fg-white,fg-bold)", pathPad, path, os.PathSeparator, repo.Name)
+		name := fmt.Sprintf("[%*v%c](fg-cyan)[%v](fg-cyan,fg-bold)", pathPad, path, os.PathSeparator, repo.Name)
 
 		line := []string{name, repo.BranchStatus, repo.Status}
 
