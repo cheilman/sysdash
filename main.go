@@ -96,7 +96,6 @@ func rightJustify(width int, str string) string {
 
 	rightJustfyLen := width - utf8.RuneCountInString(str)
 
-	log.Printf("Width: %v, Rune: %v, Len: %v, Justify: %v", width, utf8.RuneCountInString(str), len(str), rightJustfyLen)
 	var rightJustify = ""
 	if rightJustfyLen > 0 {
 		rightJustify = strings.Repeat(" ", rightJustfyLen)
@@ -107,7 +106,6 @@ func rightJustify(width int, str string) string {
 
 func centerString(width int, str string) string {
 	start := (width / 2) - (utf8.RuneCountInString(str) / 2)
-	log.Printf("Width: %v, Str: '%v', Start: %v", width, str, start)
 
 	if start > 0 {
 		return fmt.Sprintf("%s%s", strings.Repeat(" ", start), str)
@@ -275,7 +273,6 @@ func loadDiskUsage() map[string]DiskUsage {
 				availBytes = statfs.Bavail * blocksize
 				if totalBytes > 0 {
 					bytesFreePercent = float64(availBytes) / float64(totalBytes)
-					log.Printf("MOUNT: %v -- bytes: %v / %v (%0.2f%%)", mnt.MountPoint, prettyPrintBytes(availBytes), prettyPrintBytes(totalBytes), bytesFreePercent*100)
 				} else {
 					log.Printf("Bad total bytes: %v", totalBytes)
 				}
@@ -284,7 +281,6 @@ func loadDiskUsage() map[string]DiskUsage {
 				usedInodes = statfs.Ffree
 				if totalInodes > 0 {
 					inodesFreePercent = float64(totalInodes-usedInodes) / float64(totalInodes)
-					log.Printf("MOUNT: %v -- inodes: %v / %v (%0.0f%%)", mnt.MountPoint, usedInodes, totalInodes, inodesFreePercent*100)
 				} else {
 					log.Printf("Bad total inodes: %v", totalInodes)
 				}
@@ -299,8 +295,6 @@ func loadDiskUsage() map[string]DiskUsage {
 					InodesInUse:          usedInodes,
 					FreeInodesPercentage: inodesFreePercent,
 				}
-
-				log.Printf("MOUNT: %v -- %v", mnt.MountPoint, usage)
 
 				diskUsageData[mnt.MountPoint] = usage
 			}
@@ -443,13 +437,10 @@ func NewRepoInfo(fullPath string) RepoInfo {
 	// Normalize path with home directory (if posible)
 	homePath := fullPath
 
-	log.Printf("Trying to normalize '%v' with home '%v'", fullPath, HOME)
 	if strings.HasPrefix(fullPath, HOME) {
-		log.Printf("Has home prefix")
 		relative, relErr := filepath.Rel(HOME, fullPath)
 
 		if relErr == nil {
-			log.Printf("Relative: %v", relative)
 			homePath = filepath.Join("~", relative)
 		} else {
 			log.Printf("Error getting relative: %v", relErr)
@@ -477,19 +468,12 @@ var cachedGitRepos = NewCachedGitRepoList(DefaultGitRepoSearch)
 // Walks the search directories to look for git folders
 // search is a map of directory roots to depths
 func getGitRepositories(search map[string]int) []string {
-	log.Printf("Loading repos from: %v", search)
 	var retval = make([]string, 0)
 
 	for path, depth := range search {
 		gitRepos := getGitRepositoriesForPath(path, depth)
 
 		retval = append(retval, gitRepos...)
-	}
-
-	// Good-o!
-	log.Printf("Pre-filtered Repos:")
-	for _, r := range retval {
-		log.Printf("--> %v", r)
 	}
 
 	// Sort
@@ -519,20 +503,11 @@ func getGitRepositories(search map[string]int) []string {
 
 	retval = retval[:w] // slice it to just what we wrote
 
-	// Good-o!
-	log.Printf("Post-filtered Repos:")
-	for _, r := range retval {
-		log.Printf("--> %v", r)
-	}
-
 	return retval
 }
 
 func getGitRepositoriesForPath(root string, maxDepth int) []string {
-	log.Printf("Investigating '%v' to a depth of '%v'", root, maxDepth)
 	var retval = walkTreeLookingForGit(root, nil, 0, maxDepth)
-
-	log.Printf("Found: %v", retval)
 
 	return retval
 }
@@ -1041,11 +1016,6 @@ func (w *DiskColumn) update() {
 
 	w.column.Cols = []*ui.Row{}
 	ir := w.column
-
-	//log.Printf("Added row for widget %v", w.header)
-	//nr := &ui.Row{Span: 12, Widget: w.header}
-	//ir.Cols = []*ui.Row{nr}
-	//ir = nr
 
 	for _, widget := range gauges {
 		nr := &ui.Row{Span: 12, Widget: widget}
