@@ -1368,14 +1368,15 @@ const MinimumRepoNameWidth = 26
 const MinimumRepoBranchesWidth = 37
 
 type GitRepoWidget struct {
-	widget *ui.List
+	widget *ui.Table
 }
 
 func NewGitRepoWidget() *GitRepoWidget {
 	// Create base element
-	e := ui.NewList()
+	e := ui.NewTable()
 	e.Border = true
 	e.BorderLabel = "Git Repos"
+	e.Separator = false
 
 	// Create widget
 	w := &GitRepoWidget{
@@ -1393,7 +1394,7 @@ func (w *GitRepoWidget) getGridWidget() ui.GridBufferer {
 }
 
 func (w *GitRepoWidget) update() {
-	w.widget.Items = []string{}
+	w.widget.Rows = [][]string{}
 	w.widget.Height = 2
 
 	// Load repos
@@ -1425,9 +1426,9 @@ func (w *GitRepoWidget) update() {
 
 		name := fmt.Sprintf("[%*v%c](fg-white)[%v](fg-white,fg-bold)", pathPad, path, os.PathSeparator, repo.Name)
 
-		line := fmt.Sprintf("%v | %*v | %v", name, maxBranchesWidth, repo.BranchStatus, repo.Status)
+		line := []string{name, repo.BranchStatus, repo.Status}
 
-		w.widget.Items = append(w.widget.Items, line)
+		w.widget.Rows = append(w.widget.Rows, line)
 		w.widget.Height++
 	}
 }
