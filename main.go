@@ -136,6 +136,7 @@ func prettyPrintBytes(bytes uint64) string {
 }
 
 // Colors according to where value is in the min/max range
+// TODO: There's probably some way to use percentToAttributeString() and a TextBuilder to generate the attribute
 func percentToAttribute(value int, minValue int, maxValue int, invert bool) ui.Attribute {
 	span := float64(maxValue - minValue)
 	fvalue := float64(value)
@@ -170,6 +171,45 @@ func percentToAttribute(value int, minValue int, maxValue int, invert bool) ui.A
 			return ui.ColorGreen + ui.AttrBold
 		} else {
 			return ui.ColorBlue + ui.AttrBold
+		}
+	}
+}
+
+// Colors according to where value is in the min/max range
+func percentToAttributeString(value int, minValue int, maxValue int, invert bool) string {
+	span := float64(maxValue - minValue)
+	fvalue := float64(value)
+
+	// If invert is set...
+	if invert {
+		// "good" is close to min and "bad" is closer to max
+		if fvalue > 0.90*span {
+			return "fg-red,fg-bold"
+		} else if fvalue > 0.75*span {
+			return "fg-red"
+		} else if fvalue > 0.50*span {
+			return "fg-yellow,fg-bold"
+		} else if fvalue > 0.25*span {
+			return "fg-green"
+		} else if fvalue > 0.05*span {
+			return "fg-green,fg-bold"
+		} else {
+			return "fg-blue,fg-bold"
+		}
+	} else {
+		// "good" is close to max and "bad" is closer to min
+		if fvalue < 0.10*span {
+			return "fg-red,fg-bold"
+		} else if fvalue < 0.25*span {
+			return "fg-red"
+		} else if fvalue < 0.50*span {
+			return "fg-yellow,fg-bold"
+		} else if fvalue < 0.75*span {
+			return "fg-green"
+		} else if fvalue < 0.95*span {
+			return "fg-green,fg-bold"
+		} else {
+			return "fg-blue,fg-bold"
 		}
 	}
 }
@@ -961,15 +1001,18 @@ func (w *CPUWidget) getGridWidget() ui.GridBufferer {
 func (w *CPUWidget) update() {
 	w.loadProcessorStats()
 
-	w.widget.BorderLabel = fmt.Sprintf("CPU: %0.2f%% -- 5m Load: %0.2f", w.cpuPercent*100, w.mostRecent5MinLoad)
+	loadPercent := float64(w.mostRecent5MinLoad) / float64(w.numProcessors)
+
+	cpuColorString := percentToAttributeString(int(100.0*w.cpuPercent), 0, 100, true)
+
+	loadColor := percentToAttribute(int(100.0*loadPercent), 0, 100, true)
+	loadColorString := percentToAttributeString(int(100.0*loadPercent), 0, 100, true)
+
+	w.widget.BorderLabel = fmt.Sprintf("[CPU: %0.2f%%](%s)[───](fg-white)[5m Load: %0.2f](%s)", w.cpuPercent*100, cpuColorString, w.mostRecent5MinLoad, loadColorString)
 	w.widget.Data = w.loadLast1Min
 
-	// Adjust border color by CPU Percentage
-	w.widget.BorderLabelFg = percentToAttribute(int(100.0*w.cpuPercent), 0, 100, true)
-
 	// Adjust graph axes color by Load value (never bold)
-	loadPercent := float64(w.mostRecent5MinLoad) / float64(w.numProcessors)
-	w.widget.AxesColor = percentToAttribute(int(100.0*loadPercent), 0, 100, true)
+	w.widget.AxesColor = loadColor
 
 }
 
