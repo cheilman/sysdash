@@ -785,16 +785,16 @@ func (w *DiskColumn) update() {
 		gauges = append(gauges, NewDiskGauge(d))
 	}
 
-	sort.Sort(ByMountPoint(w.widgets))
+	sort.Sort(ByMountPoint(gauges))
 
 	log.Printf("Creating columns (%d)", len(gauges))
 	w.column.Cols = []*ui.Row{}
 	ir := w.column
 
-	log.Printf("Added row for widget %v", w.header)
-	nr := &ui.Row{Span: 12, Widget: w.header}
-	ir.Cols = []*ui.Row{nr}
-	ir = nr
+	//log.Printf("Added row for widget %v", w.header)
+	//nr := &ui.Row{Span: 12, Widget: w.header}
+	//ir.Cols = []*ui.Row{nr}
+	//ir = nr
 
 	for _, widget := range gauges {
 		log.Printf("Added row for widget %v", widget.BorderLabel)
