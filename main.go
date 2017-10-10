@@ -43,6 +43,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -53,6 +54,7 @@ import (
 
 	linuxproc "github.com/c9s/goprocinfo/linux"
 	ui "github.com/gizak/termui"
+	walk "github.com/karrick/godirwalk"
 	"github.com/sqp/pulseaudio"
 	set "gopkg.in/fatih/set.v0"
 )
@@ -175,7 +177,7 @@ func percentToAttribute(value int, minValue int, maxValue int, invert bool) ui.A
 }
 
 ////////////////////////////////////////////
-// Utility: Data gathering
+// Utility: Command Exec
 ////////////////////////////////////////////
 
 func execAndGetOutput(name string, args ...string) (stdout string, exitCode int, err error) {
@@ -204,6 +206,10 @@ func execAndGetOutput(name string, args ...string) (stdout string, exitCode int,
 
 	return
 }
+
+////////////////////////////////////////////
+// Utility: Disk Usage
+////////////////////////////////////////////
 
 type DiskUsage struct {
 	MountPoint           string
@@ -312,7 +318,7 @@ type CachedDiskUsage struct {
 }
 
 func (w *CachedDiskUsage) getUpdateInterval() time.Duration {
-	return KerberosUpdateInterval
+	return DiskUsageUpdateInterval
 }
 
 func (w *CachedDiskUsage) getLastUpdated() *time.Time {
@@ -339,6 +345,253 @@ func NewCachedDiskUsage() *CachedDiskUsage {
 }
 
 var cachedDiskUsage = NewCachedDiskUsage()
+
+////////////////////////////////////////////
+// Utility: Git Repo List
+////////////////////////////////////////////
+
+const GitRepoListUpdateInterval = 30 * time.Second
+
+var HOME = os.ExpandEnv("$HOME")
+
+// TODO: Get these dynamically
+var DefaultGitRepoSearch = map[string]int{
+	"/home/local/ANT/heilmanc/.cahhome":                       5,
+	"/home/local/ANT/heilmanc/prj":                            3,
+	"/home/local/ANT/heilmanc/workplace":                      5,
+	"/home/local/ANT/heilmanc/go/src/github.com/cheilman/":    3,
+	"/home/local/ANT/heilmanc/go/src/bitbucket.org/cheilman/": 3,
+}
+
+type RepoInfo struct {
+	Name         string
+	FullPath     string
+	HomePath     string
+	BranchStatus string
+	Status       string
+}
+
+type CachedGitRepoList struct {
+	repoSearch  map[string]int
+	Repos       []RepoInfo
+	lastUpdated *time.Time
+}
+
+func (w *CachedGitRepoList) getUpdateInterval() time.Duration {
+	return GitRepoListUpdateInterval
+}
+
+func (w *CachedGitRepoList) getLastUpdated() *time.Time {
+	return w.lastUpdated
+}
+
+func (w *CachedGitRepoList) setLastUpdated(t time.Time) {
+	w.lastUpdated = &t
+}
+
+func (w *CachedGitRepoList) update() {
+	if shouldUpdate(w) {
+		repos := getGitRepositories(w.repoSearch)
+
+		w.Repos = make([]RepoInfo, 0)
+
+		for _, repo := range repos {
+			repoInfo := NewRepoInfo(repo)
+
+			w.Repos = append(w.Repos, repoInfo)
+		}
+	}
+}
+
+func NewCachedGitRepoList(search map[string]int) *CachedGitRepoList {
+	// Build it
+	w := &CachedGitRepoList{
+		repoSearch: search,
+		Repos:      make([]RepoInfo, 0),
+	}
+
+	w.update()
+
+	return w
+}
+
+func normalizePath(osPathname string) string {
+	// Get absolute path with no symlinks
+	nolinksPath, symErr := filepath.EvalSymlinks(osPathname)
+	if symErr != nil {
+		log.Printf("Error evaluating file symlinks (%v): %v", osPathname, symErr)
+		return osPathname
+	} else {
+		fullName, pathErr := filepath.Abs(nolinksPath)
+
+		if pathErr != nil {
+			log.Printf("Error getting absolute path (%v): %v", nolinksPath, pathErr)
+			return nolinksPath
+		} else {
+			return fullName
+		}
+	}
+}
+
+func NewRepoInfo(fullPath string) RepoInfo {
+	// This is the path to .git, so go up a level
+	fullPath = normalizePath(filepath.Join(fullPath, ".."))
+
+	// Repo name
+	name := filepath.Base(fullPath)
+
+	// Normalize path with home directory (if posible)
+	homePath := fullPath
+
+	log.Printf("Trying to normalize '%v' with home '%v'", fullPath, HOME)
+	if strings.HasPrefix(fullPath, HOME) {
+		log.Printf("Has home prefix")
+		relative, relErr := filepath.Rel(HOME, fullPath)
+
+		if relErr == nil {
+			log.Printf("Relative: %v", relative)
+			homePath = filepath.Join("~", relative)
+		} else {
+			log.Printf("Error getting relative: %v", relErr)
+		}
+	}
+
+	// Load repo status
+	branches := ""
+	status := ""
+
+	// Build it
+	r := RepoInfo{
+		Name:         name,
+		FullPath:     fullPath,
+		HomePath:     homePath,
+		BranchStatus: branches,
+		Status:       status,
+	}
+
+	return r
+}
+
+var cachedGitRepos = NewCachedGitRepoList(DefaultGitRepoSearch)
+
+// Walks the search directories to look for git folders
+// search is a map of directory roots to depths
+func getGitRepositories(search map[string]int) []string {
+	log.Printf("Loading repos from: %v", search)
+	var retval = make([]string, 0)
+
+	for path, depth := range search {
+		gitRepos := getGitRepositoriesForPath(path, depth)
+
+		retval = append(retval, gitRepos...)
+	}
+
+	// Good-o!
+	log.Printf("Pre-filtered Repos:")
+	for _, r := range retval {
+		log.Printf("--> %v", r)
+	}
+
+	// Sort
+	sort.Strings(retval)
+
+	// Uniquify
+	// w is where non-matching elements should be written
+	// last is the last element we wrote
+	// r is the current read pointer
+	w := 1
+	last := 0
+	for r := 1; r < len(retval); r++ {
+		// If they're the same, skip it
+		if retval[r] == retval[last] {
+			continue
+		}
+
+		// They're different, write it to the array
+		retval[w] = retval[r]
+
+		// Save last pointer
+		last = w
+
+		// Advance
+		w++
+	}
+
+	retval = retval[:w] // slice it to just what we wrote
+
+	// Good-o!
+	log.Printf("Post-filtered Repos:")
+	for _, r := range retval {
+		log.Printf("--> %v", r)
+	}
+
+	return retval
+}
+
+func getGitRepositoriesForPath(root string, maxDepth int) []string {
+	log.Printf("Investigating '%v' to a depth of '%v'", root, maxDepth)
+	var retval = walkTreeLookingForGit(root, nil, 0, maxDepth)
+
+	log.Printf("Found: %v", retval)
+
+	return retval
+}
+
+func walkTreeLookingForGit(path string, de *walk.Dirent, curDepth int, maxDepth int) []string {
+	// Do we keep going?
+	if curDepth <= maxDepth {
+		// de is nil the first time through
+		if de != nil {
+			gitPath := checkAndResolveGitFolder(path, de)
+
+			if gitPath != nil {
+				// Got it!
+				return []string{*gitPath}
+			}
+		}
+
+		// Get children
+		retval := make([]string, 0)
+
+		kids, err := walk.ReadDirents(path, nil)
+
+		if err != nil {
+			log.Printf("Failed to traverse into children of '%v': %v", path, err)
+		} else {
+			for _, kidDE := range kids {
+				if kidDE.IsDir() {
+					results := walkTreeLookingForGit(filepath.Join(path, kidDE.Name()), kidDE, curDepth+1, maxDepth)
+
+					retval = append(retval, results...)
+				}
+			}
+		}
+
+		return retval
+	} else {
+		return []string{}
+	}
+}
+
+// Returns nil if not a git folder
+// Returns a resolved pathname if is a git folder
+func checkAndResolveGitFolder(osPathname string, de *walk.Dirent) *string {
+	// check name
+	if !de.IsDir() {
+		return nil
+	}
+
+	if de.Name() != ".git" {
+		return nil
+	}
+
+	path := normalizePath(osPathname)
+	return &path
+}
+
+////////////////////////////////////////////
+// Utility: Git Repo Status
+////////////////////////////////////////////
 
 ////////////////////////////////////////////
 // Utility: Widgets
@@ -781,13 +1034,11 @@ func (w *DiskColumn) update() {
 	gauges := make([]*ui.Gauge, 0)
 
 	for _, d := range cachedDiskUsage.LastUsage {
-		log.Printf("Appending new gauge for: %v", d)
 		gauges = append(gauges, NewDiskGauge(d))
 	}
 
 	sort.Sort(ByMountPoint(gauges))
 
-	log.Printf("Creating columns (%d)", len(gauges))
 	w.column.Cols = []*ui.Row{}
 	ir := w.column
 
@@ -797,7 +1048,6 @@ func (w *DiskColumn) update() {
 	//ir = nr
 
 	for _, widget := range gauges {
-		log.Printf("Added row for widget %v", widget.BorderLabel)
 		nr := &ui.Row{Span: 12, Widget: widget}
 		ir.Cols = []*ui.Row{nr}
 		ir = nr
@@ -809,8 +1059,6 @@ func (w *DiskColumn) resize() {
 }
 
 func NewDiskGauge(usage DiskUsage) *ui.Gauge {
-	log.Printf("DISK: %v -- %v", usage.MountPoint, usage)
-
 	free := int(100 * usage.FreePercentage)
 	g := ui.NewGauge()
 	g.BorderLabel = usage.MountPoint
@@ -1236,6 +1484,85 @@ func (w *NetworkWidget) resize() {
 }
 
 ////////////////////////////////////////////
+// Widget: Git Repos
+////////////////////////////////////////////
+
+const MinimumRepoNameWidth = 26
+const MinimumRepoBranchesWidth = 37
+
+type GitRepoWidget struct {
+	widget *ui.Par
+}
+
+func NewGitRepoWidget() *GitRepoWidget {
+	// Create base element
+	e := ui.NewPar("")
+	e.Border = true
+	e.BorderLabel = "Git Repos"
+
+	// Create widget
+	w := &GitRepoWidget{
+		widget: e,
+	}
+
+	w.update()
+	w.resize()
+
+	return w
+}
+
+func (w *GitRepoWidget) getGridWidget() ui.GridBufferer {
+	return w.widget
+}
+
+func (w *GitRepoWidget) update() {
+	w.widget.Text = ""
+	w.widget.Height = 2
+
+	// Load repos
+	// TODO: Switch this to status
+	cachedGitRepos.update()
+
+	maxRepoWidth := 0
+	maxBranchesWidth := 0
+
+	for _, repo := range cachedGitRepos.Repos {
+		// Figure out max length
+		if len(repo.HomePath) > maxRepoWidth {
+			maxRepoWidth = len(repo.HomePath)
+		}
+	}
+
+	if maxRepoWidth < MinimumRepoNameWidth {
+		maxRepoWidth = MinimumRepoNameWidth
+	}
+
+	if maxBranchesWidth < MinimumRepoBranchesWidth {
+		maxBranchesWidth = MinimumRepoBranchesWidth
+	}
+
+	for _, repo := range cachedGitRepos.Repos {
+		if w.widget.Text != "" {
+			// Prepend a newline
+			w.widget.Text += "\n"
+		}
+
+		// Make the name all fancy
+		pathPad := maxRepoWidth - len(repo.Name)
+		path := filepath.Dir(repo.HomePath)
+
+		name := fmt.Sprintf("[%*v%c](fg-white)[%v](fg-white,fg-bold)", pathPad, path, os.PathSeparator, repo.Name)
+
+		w.widget.Text += fmt.Sprintf("%v | %*v | %v", name, maxBranchesWidth, repo.BranchStatus, repo.Status)
+		w.widget.Height++
+	}
+}
+
+func (w *GitRepoWidget) resize() {
+	// Do nothing
+}
+
+////////////////////////////////////////////
 // Where the real stuff happens
 ////////////////////////////////////////////
 
@@ -1289,11 +1616,11 @@ func main() {
 	cpu := NewCPUWidget()
 	widgets = append(widgets, cpu)
 
-	repo := NewTempWidget("repos")
+	repo := NewGitRepoWidget()
 	widgets = append(widgets, repo)
 
-	commits := NewTempWidget("commits")
-	widgets = append(widgets, commits)
+	//commits := NewTempWidget("commits")
+	//widgets = append(widgets, commits)
 
 	twitter1 := NewTempWidget("tinycare")
 	widgets = append(widgets, twitter1)
@@ -1324,8 +1651,8 @@ func main() {
 			disk.getColumn(),
 			ui.NewCol(6, 0, weather.getGridWidget())),
 		ui.NewRow(
-			ui.NewCol(6, 0, repo.getGridWidget()),
-			ui.NewCol(6, 0, commits.getGridWidget())),
+			ui.NewCol(12, 0, repo.getGridWidget())),
+		//ui.NewCol(6, 0, commits.getGridWidget())),
 		ui.NewRow(
 			ui.NewCol(4, 0, twitter1.getGridWidget()),
 			ui.NewCol(4, 0, twitter2.getGridWidget()),
