@@ -206,6 +206,21 @@ func execAndGetOutput(name string, args ...string) (stdout string, exitCode int,
 }
 
 ////////////////////////////////////////////
+// Utility: Time
+////////////////////////////////////////////
+
+func getTime() (time.Time, *linuxproc.Uptime) {
+	now := time.Now().UTC()
+	uptime, err := linuxproc.ReadUptime("/proc/uptime")
+
+	if err != nil {
+		uptime = nil
+	}
+
+	return now, uptime
+}
+
+////////////////////////////////////////////
 // Utility: Disk Usage
 ////////////////////////////////////////////
 
@@ -724,164 +739,16 @@ func getHostname() (string, string) {
 }
 
 ////////////////////////////////////////////
-// Widget: Time
-////////////////////////////////////////////
-
-type TimeWidget struct {
-	widget      *ui.Par
-	tickCounter uint64
-}
-
-func NewTimeWidget() *TimeWidget {
-	// Create base element
-	e := ui.NewPar("Time")
-	e.Height = 1
-	e.Border = false
-	e.TextFgColor = ui.ColorBlue + ui.AttrBold
-
-	// Create widget
-	w := &TimeWidget{
-		widget:      e,
-		tickCounter: 0,
-	}
-
-	w.update()
-	w.resize()
-
-	return w
-}
-
-func (w *TimeWidget) getGridWidget() ui.GridBufferer {
-	return w.widget
-}
-
-func (w *TimeWidget) update() {
-	now, uptime := getTime()
-	//nowStr := now.Local().Format(time.RFC1123Z)
-	nowStr := now.Local().Format("2006/01/02 15:04:05 MST")
-	uptimeStr := uptime.GetTotalDuration()
-
-	timeStr := fmt.Sprintf("%v -- Up: %v ", nowStr, uptimeStr)
-
-	w.widget.Text = centerString(w.widget.Width, timeStr)
-}
-
-func (w *TimeWidget) resize() {
-	// Update
-	w.update()
-}
-
-func getTime() (time.Time, *linuxproc.Uptime) {
-	now := time.Now().UTC()
-	uptime, err := linuxproc.ReadUptime("/proc/uptime")
-
-	if err != nil {
-		uptime = nil
-	}
-
-	return now, uptime
-
-}
-
-////////////////////////////////////////////
-// Widget: Kerberos
-////////////////////////////////////////////
-
-const KerberosUpdateInterval = 10 * time.Second
-
-type KerberosWidget struct {
-	widget      *ui.Par
-	lastUpdated *time.Time
-}
-
-func NewKerberosWidget() *KerberosWidget {
-	// Create base element
-	e := ui.NewPar("Kerberos")
-	e.Height = 1
-	e.Border = false
-
-	// Create widget
-	w := &KerberosWidget{
-		widget:      e,
-		lastUpdated: nil,
-	}
-
-	w.update()
-	w.resize()
-
-	return w
-}
-
-func (w *KerberosWidget) getGridWidget() ui.GridBufferer {
-	return w.widget
-}
-
-func (w *KerberosWidget) update() {
-	if shouldUpdate(w) {
-		// Do we have a ticket?
-		_, exitCode, _ := execAndGetOutput("klist", "-s")
-
-		hasTicket := exitCode == 0
-
-		// Get the time left
-		timeLeftOutput, _, err := execAndGetOutput("kleft", "")
-		var hasTimeLeft = false
-		var timeLeft string
-
-		if err == nil {
-			timeLeftParts := strings.Split(timeLeftOutput, " ")
-			if len(timeLeftParts) > 1 {
-				hasTimeLeft = true
-				timeLeft = strings.TrimSpace(timeLeftParts[1])
-			}
-		}
-
-		// Piece it all together
-		krbText := "Kerberos Ticket"
-
-		if hasTicket {
-			if hasTimeLeft {
-				krbText = fmt.Sprintf("Krb: OK (%v)", timeLeft)
-			} else {
-				krbText = fmt.Sprintf("Krb: OK")
-			}
-			w.widget.TextFgColor = ui.ColorGreen + ui.AttrBold
-		} else {
-			krbText = fmt.Sprintf("Krb: NO TICKET")
-			w.widget.TextFgColor = ui.ColorRed + ui.AttrBold
-		}
-
-		w.widget.Text = centerString(w.widget.Width, krbText)
-	}
-}
-
-func (w *KerberosWidget) resize() {
-	// Do nothing
-}
-
-func (w *KerberosWidget) getUpdateInterval() time.Duration {
-	return KerberosUpdateInterval
-}
-
-func (w *KerberosWidget) getLastUpdated() *time.Time {
-	return w.lastUpdated
-}
-
-func (w *KerberosWidget) setLastUpdated(t time.Time) {
-	w.lastUpdated = &t
-}
-
-////////////////////////////////////////////
 // Widget: Host Information
 ////////////////////////////////////////////
 
 type HostInfoWidget struct {
-	widget *ui.Par
+	widget *ui.List
 }
 
 func NewHostInfoWidget() *HostInfoWidget {
 	// Create base element
-	e := ui.NewPar("")
+	e := ui.NewList()
 	e.Height = 5
 	e.Border = true
 	e.BorderFg = ui.ColorCyan + ui.AttrBold
@@ -905,20 +772,18 @@ func (w *HostInfoWidget) update() {
 	now, uptime := getTime()
 	krbText, krbAttr := getKerberosStatusString()
 
-	// Start building paragraph
-	w.widget.Text = ""
+	// Start building lines
+	w.widget.Items = []string{}
 	w.widget.PaddingLeft = 2
 
 	// Set time
-	w.widget.Text += fmt.Sprintf("[Time](fg-cyan)....... [%v](fg-magenta)", now.Local().Format("2006/01/02 15:04:05 MST"))
+	w.widget.Items = append(w.widget.Items, fmt.Sprintf("[Time](fg-cyan)....... [%v](fg-magenta)", now.Local().Format("2006/01/02 15:04:05 MST")))
 
 	// Uptime
-	w.widget.Text += "\n"
-	w.widget.Text += fmt.Sprintf("[Uptime](fg-cyan)..... [%v](fg-green)", uptime.GetTotalDuration())
+	w.widget.Items = append(w.widget.Items, fmt.Sprintf("[Uptime](fg-cyan)..... [%v](fg-green)", uptime.GetTotalDuration()))
 
 	// Kerberos
-	w.widget.Text += "\n"
-	w.widget.Text += fmt.Sprintf("[Kerberos](fg-cyan)... [%v](%v)", krbText, krbAttr)
+	w.widget.Items = append(w.widget.Items, fmt.Sprintf("[Kerberos](fg-cyan)... [%v](%v)", krbText, krbAttr))
 }
 
 func (w *HostInfoWidget) resize() {
@@ -1104,7 +969,7 @@ func (w *CPUWidget) update() {
 
 	// Adjust graph axes color by Load value (never bold)
 	loadPercent := float64(w.mostRecent5MinLoad) / float64(w.numProcessors)
-	w.widget.AxesColor = percentToAttribute(int(100.0*loadPercent), 0, 100, true) - ui.AttrBold
+	w.widget.AxesColor = percentToAttribute(int(100.0*loadPercent), 0, 100, true)
 
 }
 
@@ -1387,12 +1252,12 @@ func (w *AudioWidget) resize() {
 ////////////////////////////////////////////
 
 type NetworkWidget struct {
-	widget *ui.Par
+	widget *ui.List
 }
 
 func NewNetworkWidget() *NetworkWidget {
 	// Create base element
-	e := ui.NewPar("")
+	e := ui.NewList()
 	e.Height = 3
 	e.Border = true
 	e.BorderLabel = "Network"
@@ -1413,7 +1278,7 @@ func (w *NetworkWidget) getGridWidget() ui.GridBufferer {
 }
 
 func (w *NetworkWidget) update() {
-	w.widget.Text = ""
+	w.widget.Items = []string{}
 	w.widget.Height = 2
 
 	// Getting addresses pulled from: https://stackoverflow.com/a/23558495/147354
@@ -1438,10 +1303,9 @@ func (w *NetworkWidget) update() {
 						ip = v.IP
 					}
 
-					if w.widget.Text != "" {
-						w.widget.Text += "\n"
-					}
-					w.widget.Text += fmt.Sprintf("[%10v](fg-cyan): [%15v](fg-blue,fg-bold)", i.Name, ip.String())
+					line := fmt.Sprintf("[%10v](fg-cyan): [%15v](fg-blue,fg-bold)", i.Name, ip.String())
+
+					w.widget.Items = append(w.widget.Items, line)
 					w.widget.Height += 1
 				}
 			}
@@ -1461,12 +1325,12 @@ const MinimumRepoNameWidth = 26
 const MinimumRepoBranchesWidth = 37
 
 type GitRepoWidget struct {
-	widget *ui.Par
+	widget *ui.List
 }
 
 func NewGitRepoWidget() *GitRepoWidget {
 	// Create base element
-	e := ui.NewPar("")
+	e := ui.NewList()
 	e.Border = true
 	e.BorderLabel = "Git Repos"
 
@@ -1486,7 +1350,7 @@ func (w *GitRepoWidget) getGridWidget() ui.GridBufferer {
 }
 
 func (w *GitRepoWidget) update() {
-	w.widget.Text = ""
+	w.widget.Items = []string{}
 	w.widget.Height = 2
 
 	// Load repos
@@ -1512,18 +1376,15 @@ func (w *GitRepoWidget) update() {
 	}
 
 	for _, repo := range cachedGitRepos.Repos {
-		if w.widget.Text != "" {
-			// Prepend a newline
-			w.widget.Text += "\n"
-		}
-
 		// Make the name all fancy
 		pathPad := maxRepoWidth - len(repo.Name)
 		path := filepath.Dir(repo.HomePath)
 
 		name := fmt.Sprintf("[%*v%c](fg-white)[%v](fg-white,fg-bold)", pathPad, path, os.PathSeparator, repo.Name)
 
-		w.widget.Text += fmt.Sprintf("%v | %*v | %v", name, maxBranchesWidth, repo.BranchStatus, repo.Status)
+		line := fmt.Sprintf("%v | %*v | %v", name, maxBranchesWidth, repo.BranchStatus, repo.Status)
+
+		w.widget.Items = append(w.widget.Items, line)
 		w.widget.Height++
 	}
 }
