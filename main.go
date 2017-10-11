@@ -136,7 +136,7 @@ func prettyPrintBytes(bytes uint64) string {
 }
 
 // Colors according to where value is in the min/max range
-// TODO: There's probably some way to use percentToAttributeString() and a TextBuilder to generate the attribute
+// TODO: Is there a smarter way to do this/consolidate this config?
 func percentToAttribute(value int, minValue int, maxValue int, invert bool) ui.Attribute {
 	span := float64(maxValue - minValue)
 	fvalue := float64(value)
@@ -1372,8 +1372,6 @@ func (w *AudioWidget) update() {
 		w.widget.PercentColor = ui.ColorMagenta + ui.AttrBold
 	} else {
 		// Just query status
-		// TODO: Add events for update (and speed up our update interval)
-
 		sink := w.getBestSink()
 
 		if sink != nil {
@@ -1543,7 +1541,6 @@ func (w *GitRepoWidget) update() {
 	w.widget.Height = 2
 
 	// Load repos
-	// TODO: Switch this to status
 	cachedGitRepos.update()
 
 	maxRepoWidth := 0
