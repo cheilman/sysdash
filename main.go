@@ -1201,13 +1201,13 @@ func (w *CPUWidget) loadProcessorStats() {
 		w.mostRecent5MinLoad = loadavg.Last5Min
 
 		// Record, keep a fixed number around
-		if len(w.loadLast1Min) > w.widget.Width {
+		if len(w.loadLast1Min) > (w.widget.Width * 2) {
 			w.loadLast1Min = append(w.loadLast1Min[1:], loadavg.Last1Min)
 		} else {
 			w.loadLast1Min = append(w.loadLast1Min, loadavg.Last1Min)
 		}
 
-		if len(w.loadLast5Min) > w.widget.Width {
+		if len(w.loadLast5Min) > (w.widget.Width * 2) {
 			w.loadLast5Min = append(w.loadLast5Min[1:], loadavg.Last5Min)
 		} else {
 			w.loadLast5Min = append(w.loadLast5Min, loadavg.Last5Min)
