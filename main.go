@@ -218,11 +218,15 @@ func percentToAttributeString(value int, minValue int, maxValue int, invert bool
 // Utility: Command Exec
 ////////////////////////////////////////////
 
-func execAndGetOutput(name string, args ...string) (stdout string, exitCode int, err error) {
+func execAndGetOutput(name string, workingDirectory *string, args ...string) (stdout string, exitCode int, err error) {
 	cmd := exec.Command(name, args...)
 
 	var out bytes.Buffer
 	cmd.Stdout = &out
+
+	if workingDirectory != nil {
+		cmd.Dir = *workingDirectory
+	}
 
 	err = cmd.Run()
 
@@ -396,6 +400,189 @@ func NewCachedDiskUsage() *CachedDiskUsage {
 var cachedDiskUsage = NewCachedDiskUsage()
 
 ////////////////////////////////////////////
+// Utility: Git Repo Info
+////////////////////////////////////////////
+
+const GitRepoStatusUpdateInterval = 10 * time.Second
+
+type RepoStatusField struct {
+	OutputCharacter   rune
+	OutputColorString string
+}
+
+// Key is the git status rune (what shows up in `git status -sb`)
+var RepoStatusFieldDefinitionsOrderedKeys = []rune{'M', 'A', 'D', 'R', 'C', 'U', '?', '!'}
+var RepoStatusFieldDefinitions = map[rune]RepoStatusField{
+	// modified
+	'M': RepoStatusField{OutputCharacter: 'M', OutputColorString: "fg-green"},
+	// added
+	'A': RepoStatusField{OutputCharacter: '+', OutputColorString: "fg-green,fg-bold"},
+	// deleted
+	'D': RepoStatusField{OutputCharacter: '-', OutputColorString: "fg-red,fg-bold"},
+	// renamed
+	'R': RepoStatusField{OutputCharacter: 'R', OutputColorString: "fg-yellow,fg-bold"},
+	// copied
+	'C': RepoStatusField{OutputCharacter: 'C', OutputColorString: "fg-blue,fg-bold"},
+	// updated
+	'U': RepoStatusField{OutputCharacter: 'U', OutputColorString: "fg-magenta,fg-bold"},
+	// untracked
+	'?': RepoStatusField{OutputCharacter: '?', OutputColorString: "fg-red"},
+	// ignored
+	'!': RepoStatusField{OutputCharacter: '!', OutputColorString: "fg-cyan"},
+}
+
+type RepoInfo struct {
+	Name         string
+	FullPath     string
+	HomePath     string
+	BranchStatus string
+	Status       string
+	lastUpdated  *time.Time
+}
+
+func NewRepoInfo(fullPath string) RepoInfo {
+	if strings.HasSuffix(fullPath, ".git") || strings.HasSuffix(fullPath, ".git/") {
+		// This is the path to the .git folder, so go up a level
+		fullPath = normalizePath(filepath.Join(fullPath, ".."))
+	}
+
+	// Repo name
+	name := filepath.Base(fullPath)
+
+	// Normalize path with home directory (if possible)
+	homePath := fullPath
+
+	if strings.HasPrefix(fullPath, HOME) {
+		relative, relErr := filepath.Rel(HOME, fullPath)
+
+		if relErr == nil {
+			homePath = filepath.Join("~", relative)
+		} else {
+			log.Printf("Error getting relative: %v", relErr)
+		}
+	}
+
+	// Load repo status
+	branches := "my branches"
+	status := "my status"
+
+	// Build it
+	r := RepoInfo{
+		Name:         name,
+		FullPath:     fullPath,
+		HomePath:     homePath,
+		BranchStatus: branches,
+		Status:       status,
+	}
+
+	r.update()
+
+	return r
+}
+
+func (w *RepoInfo) update() {
+	if shouldUpdate(w) {
+		// TODO: Make this not run a command to get this data
+		// Go do a git status in that folder
+		output, exitCode, err := execAndGetOutput("git", &w.FullPath, "-c", "color.status=never", "-c", "color.ui=never", "status", "-sb")
+
+		if err != nil {
+			log.Printf("Failed to get git output for repo %v (%v): %v", w.Name, w.FullPath, err)
+		} else if exitCode != 0 {
+			log.Printf("Bad exit code getting git output for repo %v (%v): %v", w.Name, w.FullPath, exitCode)
+		} else {
+			// Parse out the output
+			lines := strings.Split(output, "\n")
+
+			// Branch is first line
+			branchLine := lines[0][3:]
+			branchName := strings.Split(branchLine, " ")[0]
+			if strings.Contains(branchName, "...") {
+				branchName = strings.Split(branchName, "...")[0]
+			}
+
+			branchState := ""
+			if strings.Contains(branchLine, "[") {
+				branchState = "[" + strings.Split(branchLine, "[")[1]
+			}
+
+			nameColor := "fg-cyan"
+
+			if branchName == "master" || branchName == "mainline" {
+				nameColor = "fg-green"
+			}
+
+			w.BranchStatus = fmt.Sprintf("[%v](%s)", branchName, nameColor)
+
+			if len(branchState) > 0 {
+				w.BranchStatus += fmt.Sprintf(" [%v](fg-magenta)", branchState)
+			}
+
+			// Status for files follows, let's aggregate
+			status := make(map[rune]int, len(RepoStatusFieldDefinitions))
+			for field, _ := range RepoStatusFieldDefinitions {
+				status[field] = 0
+			}
+
+			for _, l := range lines[1:] {
+				l = strings.TrimSpace(l)
+
+				if len(l) < 2 {
+					continue
+				}
+
+				// Grab first two characters
+				statchars := l[:2]
+
+				for key := range status {
+					if strings.ContainsRune(statchars, key) {
+						status[key]++
+					}
+				}
+			}
+
+			w.Status = buildColoredStatusStringFromMap(status)
+		}
+	}
+}
+
+func (w *RepoInfo) getUpdateInterval() time.Duration {
+	return GitRepoStatusUpdateInterval
+}
+
+func (w *RepoInfo) getLastUpdated() *time.Time {
+	return w.lastUpdated
+}
+
+func (w *RepoInfo) setLastUpdated(t time.Time) {
+	w.lastUpdated = &t
+}
+
+type BySortOrder []*ui.Gauge
+
+func (a BySortOrder) Len() int           { return len(a) }
+func (a BySortOrder) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a BySortOrder) Less(i, j int) bool { return a[i].BorderLabel < a[j].BorderLabel }
+
+func buildColoredStatusStringFromMap(status map[rune]int) string {
+	retval := ""
+
+	for _, key := range RepoStatusFieldDefinitionsOrderedKeys {
+		count := status[key]
+
+		if count > 0 {
+			if retval != "" {
+				retval += " "
+			}
+
+			retval += fmt.Sprintf("[%c:%d](%s)", RepoStatusFieldDefinitions[key].OutputCharacter, count, RepoStatusFieldDefinitions[key].OutputColorString)
+		}
+	}
+
+	return retval
+}
+
+////////////////////////////////////////////
 // Utility: Git Repo List
 ////////////////////////////////////////////
 
@@ -410,14 +597,6 @@ var DefaultGitRepoSearch = map[string]int{
 	"/home/local/ANT/heilmanc/workplace":                      5,
 	"/home/local/ANT/heilmanc/go/src/github.com/cheilman/":    3,
 	"/home/local/ANT/heilmanc/go/src/bitbucket.org/cheilman/": 3,
-}
-
-type RepoInfo struct {
-	Name         string
-	FullPath     string
-	HomePath     string
-	BranchStatus string
-	Status       string
 }
 
 type CachedGitRepoList struct {
@@ -450,6 +629,11 @@ func (w *CachedGitRepoList) update() {
 			w.Repos = append(w.Repos, repoInfo)
 		}
 	}
+
+	// Update status for all the repos as well
+	for _, r := range w.Repos {
+		r.update()
+	}
 }
 
 func NewCachedGitRepoList(search map[string]int) *CachedGitRepoList {
@@ -480,42 +664,6 @@ func normalizePath(osPathname string) string {
 			return fullName
 		}
 	}
-}
-
-func NewRepoInfo(fullPath string) RepoInfo {
-	// This is the path to .git, so go up a level
-	fullPath = normalizePath(filepath.Join(fullPath, ".."))
-
-	// Repo name
-	name := filepath.Base(fullPath)
-
-	// Normalize path with home directory (if posible)
-	homePath := fullPath
-
-	if strings.HasPrefix(fullPath, HOME) {
-		relative, relErr := filepath.Rel(HOME, fullPath)
-
-		if relErr == nil {
-			homePath = filepath.Join("~", relative)
-		} else {
-			log.Printf("Error getting relative: %v", relErr)
-		}
-	}
-
-	// Load repo status
-	branches := "my branches"
-	status := "my status"
-
-	// Build it
-	r := RepoInfo{
-		Name:         name,
-		FullPath:     fullPath,
-		HomePath:     homePath,
-		BranchStatus: branches,
-		Status:       status,
-	}
-
-	return r
 }
 
 var cachedGitRepos = NewCachedGitRepoList(DefaultGitRepoSearch)
@@ -618,10 +766,6 @@ func checkAndResolveGitFolder(osPathname string, de *walk.Dirent) *string {
 	path := normalizePath(osPathname)
 	return &path
 }
-
-////////////////////////////////////////////
-// Utility: Git Repo Status
-////////////////////////////////////////////
 
 ////////////////////////////////////////////
 // Utility: Widgets
@@ -769,7 +913,7 @@ func getHostname() (string, string) {
 		hostName = "unknown"
 	}
 
-	prettyName, _, prettyNameErr := execAndGetOutput("pretty-hostname")
+	prettyName, _, prettyNameErr := execAndGetOutput("pretty-hostname", nil)
 
 	if prettyNameErr == nil {
 		return hostName, prettyName
@@ -832,12 +976,12 @@ func (w *HostInfoWidget) resize() {
 
 func getKerberosStatusString() (string, string) {
 	// Do we have a ticket?
-	_, exitCode, _ := execAndGetOutput("klist", "-s")
+	_, exitCode, _ := execAndGetOutput("klist", nil, "-s")
 
 	hasTicket := exitCode == 0
 
 	// Get the time left
-	timeLeftOutput, _, err := execAndGetOutput("kleft", "")
+	timeLeftOutput, _, err := execAndGetOutput("kleft", nil, "")
 	var hasTimeLeft = false
 	var timeLeft string
 
@@ -1107,7 +1251,7 @@ func (w *BatteryWidget) getGridWidget() ui.GridBufferer {
 func (w *BatteryWidget) update() {
 	if shouldUpdate(w) {
 		// Load battery info
-		output, _, err := execAndGetOutput("ibam-battery-prompt", "-p")
+		output, _, err := execAndGetOutput("ibam-battery-prompt", nil, "-p")
 
 		if err == nil {
 			// Parse the output
@@ -1368,7 +1512,8 @@ const MinimumRepoNameWidth = 26
 const MinimumRepoBranchesWidth = 37
 
 type GitRepoWidget struct {
-	widget *ui.Table
+	widget      *ui.Table
+	lastUpdated *time.Time
 }
 
 func NewGitRepoWidget() *GitRepoWidget {
