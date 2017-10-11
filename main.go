@@ -1547,7 +1547,6 @@ func (w *GitRepoWidget) update() {
 	cachedGitRepos.update()
 
 	maxRepoWidth := 0
-	maxBranchesWidth := 0
 
 	for _, repo := range cachedGitRepos.Repos {
 		// Figure out max length
@@ -1558,10 +1557,6 @@ func (w *GitRepoWidget) update() {
 
 	if maxRepoWidth < MinimumRepoNameWidth {
 		maxRepoWidth = MinimumRepoNameWidth
-	}
-
-	if maxBranchesWidth < MinimumRepoBranchesWidth {
-		maxBranchesWidth = MinimumRepoBranchesWidth
 	}
 
 	for _, repo := range cachedGitRepos.Repos {
