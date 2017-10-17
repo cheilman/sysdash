@@ -29,7 +29,6 @@ func newBool(myBool bool) *bool {
 }
 
 func GetLatestTweet(account string) string {
-	log.Printf("Getting tweet for %v", account)
 	tweets, _, err := twitterClient.Timelines.UserTimeline(&twitter.UserTimelineParams{
 		ScreenName:      account,
 		Count:           10,
@@ -43,9 +42,7 @@ func GetLatestTweet(account string) string {
 	} else if len(tweets) < 1 {
 		log.Printf("Failed to load any tweets for '%v'.", account)
 	} else {
-		log.Printf("Tweets:\n%v", tweets)
 		t := tweets[0].Text
-		log.Printf("%v --> %v", account, t)
 		return t
 	}
 
