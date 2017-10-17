@@ -114,7 +114,7 @@ func main() {
 	twitter3 := NewTwitterWidget("astrangevoyage")
 	widgets = append(widgets, twitter3)
 
-	weather := NewTempWidget("weather")
+	weather := NewWeatherWidget(GetWeatherLocation())
 	widgets = append(widgets, weather)
 
 	//

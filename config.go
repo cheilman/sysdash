@@ -96,3 +96,19 @@ func GetTwitterAccessToken() string {
 func GetTwitterAccessTokenSecret() string {
 	return os.ExpandEnv("$SYSDASH_TWITTER_ACCESS_TOKEN_SECRET")
 }
+
+////////////////////////////////////////////
+// Weather
+////////////////////////////////////////////
+
+const DefaultWeatherLocation = "Pittsburgh,PA"
+
+func GetWeatherLocation() string {
+	loc := os.ExpandEnv("$SYSDASH_WEATHER_LOCATION")
+
+	if len(loc) <= 0 {
+		return DefaultWeatherLocation
+	} else {
+		return loc
+	}
+}
