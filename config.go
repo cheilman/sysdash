@@ -16,7 +16,18 @@ import (
 ////////////////////////////////////////////
 
 func LogToFile() bool {
-	// TODO: Figure out how to make this dynamic
+	tofile := os.ExpandEnv("$SYSDASH_LOG_TO_FILE")
+
+	if len(tofile) > 0 {
+		dolog, err := strconv.ParseBool(tofile)
+
+		if err != nil {
+			log.Printf("Failed to parse '%v' from SYSDASH_LOG_TO_FILE: %v", tofile, err)
+		} else {
+			return dolog
+		}
+	}
+
 	return false
 }
 
