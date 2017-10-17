@@ -199,18 +199,94 @@ func normalizePath(osPathname string) string {
 // Utility: 8-bit ANSI Colors
 ////////////////////////////////////////////
 
+/**
+ * Converts 8-bit color into 3/4-bit color.
+ * https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit
+ */
 func Color8Bit(index int) ui.Attribute {
-	i := index - 16
-	r := i / 36
-	i -= r * 36
-	g := i / 6
-	i -= g * 6
-	b := i
+	retval := ui.ColorBlack
 
-	rgb := ui.ColorRGB(r, g, b)
+	if index < 8 {
+		// Dim colors
+	} else if index < 16 {
+		// Bright colors
+	} else if index < 232 {
+		// Palletized colors
+		i := index - 16
+		r := i / 36
+		i -= r * 36
+		g := i / 6
+		i -= g * 6
+		b := i
 
-	log.Printf("Turned %v into (%v,%v,%v) into %08x", index, r, g, b, rgb)
+		rgb := ui.Attribute(index)
 
-	return rgb
+		log.Printf("Turned %v into (%v,%v,%v) into %08x (%d)", index, r, g, b, rgb, rgb)
+
+		smallColor := ui.ColorBlack
+
+		if r >= 3 {
+			// Red on
+			if g >= 3 {
+				// Green on
+				if b >= 3 {
+					// Blue on
+					smallColor = ui.ColorWhite + ui.AttrBold
+				} else {
+					// Blue off
+					smallColor = ui.ColorYellow + ui.AttrBold
+				}
+			} else {
+				// Green off
+				if b >= 3 {
+					// Blue on
+					smallColor = ui.ColorMagenta + ui.AttrBold
+				} else {
+					// Blue off
+					smallColor = ui.ColorRed + ui.AttrBold
+				}
+			}
+		} else {
+			// Red off
+			if g >= 3 {
+				// Green on
+				if b >= 3 {
+					// Blue on
+					smallColor = ui.ColorCyan + ui.AttrBold
+				} else {
+					// Blue off
+					smallColor = ui.ColorGreen + ui.AttrBold
+				}
+			} else {
+				// Green off
+				if b >= 3 {
+					// Blue on
+					smallColor = ui.ColorBlue + ui.AttrBold
+				} else {
+					// Blue off
+					smallColor = ui.ColorBlack
+				}
+			}
+		}
+
+		log.Printf("Turned %v into (%v,%v,%v) into %08x (%d) -- %v", index, r, g, b, rgb, rgb, smallColor)
+
+		retval = smallColor
+	} else {
+		// Grayscale colors
+		if index < 238 {
+			retval = ui.ColorBlack
+		} else if index < 244 {
+			retval = ui.ColorWhite
+		} else if index < 250 {
+			retval = ui.ColorBlack + ui.AttrBold
+		} else if index < 256 {
+			retval = ui.ColorWhite + ui.AttrBold
+		}
+	}
+
+	log.Printf("Index %v: %v", index, retval)
+
+	return retval
 
 }
