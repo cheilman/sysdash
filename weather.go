@@ -31,8 +31,12 @@ func NewWeatherWidget(location string) *WeatherWidget {
 	// Create base element
 	e := ui.NewPar("")
 	e.Border = true
-	e.Height = 7
+	e.Height = 9
 	e.BorderLabelFg = ui.ColorGreen
+	e.PaddingTop = 1
+	e.PaddingBottom = 1
+	e.PaddingLeft = 1
+	e.PaddingRight = 1
 
 	// Create widget
 	w := &WeatherWidget{
