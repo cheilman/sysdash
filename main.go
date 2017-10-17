@@ -105,13 +105,13 @@ func main() {
 	repo := NewGitRepoWidget()
 	widgets = append(widgets, repo)
 
-	twitter1 := NewTwitterWidget("tinycare")
+	twitter1 := NewTwitterWidget(GetTwitterAccount1())
 	widgets = append(widgets, twitter1)
 
-	twitter2 := NewTwitterWidget("selfcare")
+	twitter2 := NewTwitterWidget(GetTwitterAccount2())
 	widgets = append(widgets, twitter2)
 
-	twitter3 := NewTwitterWidget("astrangevoyage")
+	twitter3 := NewTwitterWidget(GetTwitterAccount3())
 	widgets = append(widgets, twitter3)
 
 	weather := NewWeatherWidget(GetWeatherLocation())

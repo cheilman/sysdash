@@ -81,6 +81,40 @@ func GetGitRepoSearchPaths() map[string]int {
 // Twitter Keys
 ////////////////////////////////////////////
 
+const DefaultTwitter1 = "tinycarebot"
+const DefaultTwitter2 = "selfcare_bot"
+const DefaultTwitter3 = "str_voyage"
+
+func GetTwitterAccount1() string {
+	acct := os.ExpandEnv("$SYSDASH_TWITTER_ACCT_1")
+
+	if len(acct) <= 0 {
+		return DefaultTwitter1
+	} else {
+		return acct
+	}
+}
+
+func GetTwitterAccount2() string {
+	acct := os.ExpandEnv("$SYSDASH_TWITTER_ACCT_2")
+
+	if len(acct) <= 0 {
+		return DefaultTwitter2
+	} else {
+		return acct
+	}
+}
+
+func GetTwitterAccount3() string {
+	acct := os.ExpandEnv("$SYSDASH_TWITTER_ACCT_3")
+
+	if len(acct) <= 0 {
+		return DefaultTwitter3
+	} else {
+		return acct
+	}
+}
+
 func GetTwitterConsumerKey() string {
 	return os.ExpandEnv("$SYSDASH_TWITTER_CONSUMER_KEY")
 }
