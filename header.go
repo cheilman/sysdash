@@ -33,7 +33,7 @@ func NewHeaderWidget() *HeaderWidget {
 
 	if prettyName != hostName {
 		// Host/pretty name are different
-		userHostHeader = fmt.Sprintf(" %v @ %v (%v)", userName, prettyName, hostName)
+		userHostHeader = fmt.Sprintf("%v @ %v (%v)", userName, prettyName, hostName)
 	} else {
 		// Host/pretty name are the same (or pretty failed)
 		userHostHeader = fmt.Sprintf("%v @ %v", userName, hostName)

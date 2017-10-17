@@ -127,14 +127,13 @@ func main() {
 
 	ui.Body.AddRows(
 		ui.NewRow(
-			ui.NewCol(6, 0, hostInfo.getGridWidget(), battery.getGridWidget(), audio.getGridWidget(), network.getGridWidget()),
+			ui.NewCol(6, 0, hostInfo.getGridWidget(), battery.getGridWidget(), audio.getGridWidget(), weather.getGridWidget()),
 			ui.NewCol(6, 0, cpu.getGridWidget())),
 		ui.NewRow(
 			disk.getColumn(),
-			ui.NewCol(6, 0, weather.getGridWidget())),
+			ui.NewCol(6, 0, network.getGridWidget())),
 		ui.NewRow(
 			ui.NewCol(12, 0, repo.getGridWidget())),
-		//ui.NewCol(6, 0, commits.getGridWidget())),
 		ui.NewRow(
 			ui.NewCol(4, 0, twitter1.getGridWidget()),
 			ui.NewCol(4, 0, twitter2.getGridWidget()),
