@@ -75,6 +75,8 @@ func (w *NetworkWidget) update() {
 				}
 			}
 		}
+
+		// TODO: Add WLAN Addresses, Network Location (geoip?)
 	}
 }
 
