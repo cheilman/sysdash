@@ -7,7 +7,9 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
@@ -201,4 +203,26 @@ func execAndGetOutput(name string, workingDirectory *string, args ...string) (st
 	stdout = out.String()
 
 	return
+}
+
+////////////////////////////////////////////
+// Utility: Paths
+////////////////////////////////////////////
+
+func normalizePath(osPathname string) string {
+	// Get absolute path with no symlinks
+	nolinksPath, symErr := filepath.EvalSymlinks(osPathname)
+	if symErr != nil {
+		log.Printf("Error evaluating file symlinks (%v): %v", osPathname, symErr)
+		return osPathname
+	} else {
+		fullName, pathErr := filepath.Abs(nolinksPath)
+
+		if pathErr != nil {
+			log.Printf("Error getting absolute path (%v): %v", nolinksPath, pathErr)
+			return nolinksPath
+		} else {
+			return fullName
+		}
+	}
 }

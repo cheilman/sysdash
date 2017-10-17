@@ -208,15 +208,6 @@ const GitRepoListUpdateInterval = 30 * time.Second
 
 var HOME = os.ExpandEnv("$HOME")
 
-// TODO: Get these dynamically
-var DefaultGitRepoSearch = map[string]int{
-	"/home/local/ANT/heilmanc/.cahhome":                       5,
-	"/home/local/ANT/heilmanc/prj":                            3,
-	"/home/local/ANT/heilmanc/workplace":                      5,
-	"/home/local/ANT/heilmanc/go/src/github.com/cheilman/":    3,
-	"/home/local/ANT/heilmanc/go/src/bitbucket.org/cheilman/": 3,
-}
-
 type CachedGitRepoList struct {
 	repoSearch  map[string]int
 	Repos       []RepoInfo
@@ -266,25 +257,7 @@ func NewCachedGitRepoList(search map[string]int) *CachedGitRepoList {
 	return w
 }
 
-func normalizePath(osPathname string) string {
-	// Get absolute path with no symlinks
-	nolinksPath, symErr := filepath.EvalSymlinks(osPathname)
-	if symErr != nil {
-		log.Printf("Error evaluating file symlinks (%v): %v", osPathname, symErr)
-		return osPathname
-	} else {
-		fullName, pathErr := filepath.Abs(nolinksPath)
-
-		if pathErr != nil {
-			log.Printf("Error getting absolute path (%v): %v", nolinksPath, pathErr)
-			return nolinksPath
-		} else {
-			return fullName
-		}
-	}
-}
-
-var cachedGitRepos = NewCachedGitRepoList(DefaultGitRepoSearch)
+var cachedGitRepos = NewCachedGitRepoList(GetGitRepoSearchPaths())
 
 // Walks the search directories to look for git folders
 // search is a map of directory roots to depths
