@@ -202,6 +202,8 @@ func normalizePath(osPathname string) string {
 /**
  * Converts 8-bit color into 3/4-bit color.
  * https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit
+ *
+ * TODO: Figure out why ui.ColorRGB doesn't work
  */
 func Color8Bit(index int) ui.Attribute {
 	retval := ui.ColorBlack
