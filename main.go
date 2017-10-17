@@ -51,7 +51,6 @@ var lastTimer uint64 = 0
 ////////////////////////////////////////////
 
 func main() {
-
 	if ANSI_REGEXP_ERR != nil {
 		panic(ANSI_REGEXP_ERR)
 	}
@@ -105,13 +104,13 @@ func main() {
 	repo := NewGitRepoWidget()
 	widgets = append(widgets, repo)
 
-	twitter1 := NewTwitterWidget(GetTwitterAccount1())
+	twitter1 := NewTwitterWidget(GetTwitterAccount1(), ui.ColorBlue+ui.AttrBold)
 	widgets = append(widgets, twitter1)
 
-	twitter2 := NewTwitterWidget(GetTwitterAccount2())
+	twitter2 := NewTwitterWidget(GetTwitterAccount2(), ui.ColorCyan)
 	widgets = append(widgets, twitter2)
 
-	twitter3 := NewTwitterWidget(GetTwitterAccount3())
+	twitter3 := NewTwitterWidget(GetTwitterAccount3(), ui.ColorMagenta)
 	widgets = append(widgets, twitter3)
 
 	weather := NewWeatherWidget(GetWeatherLocation())
@@ -169,6 +168,11 @@ func main() {
 		// Call all update funcs
 		for _, w := range widgets {
 			w.update()
+		}
+
+		// Call all resize funcs
+		for _, w := range widgets {
+			w.resize()
 		}
 
 		// Re-render

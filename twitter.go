@@ -10,17 +10,17 @@ import (
 	"time"
 
 	"github.com/dghubble/go-twitter/twitter"
+	"github.com/dghubble/oauth1"
 	ui "github.com/gizak/termui"
-	"golang.org/x/oauth2"
 )
 
 ////////////////////////////////////////////
 // Util: Twitter
 ////////////////////////////////////////////
 
-var twitterConfig = &oauth2.Config{}
-var twitterToken = &oauth2.Token{AccessToken: GetTwitterAccessToken()}
-var twitterHttpClient = twitterConfig.Client(oauth2.NoContext, twitterToken)
+var twitterConfig = oauth1.NewConfig(GetTwitterConsumerKey(), GetTwitterConsumerSecret())
+var twitterToken = oauth1.NewToken(GetTwitterAccessToken(), GetTwitterAccessTokenSecret())
+var twitterHttpClient = twitterConfig.Client(oauth1.NoContext, twitterToken)
 var twitterClient = twitter.NewClient(twitterHttpClient)
 
 func newBool(myBool bool) *bool {
@@ -43,7 +43,8 @@ func GetLatestTweet(account string) string {
 	} else if len(tweets) < 1 {
 		log.Printf("Failed to load any tweets for '%v'.", account)
 	} else {
-		t := tweets[0].FullText
+		log.Printf("Tweets:\n%v", tweets)
+		t := tweets[0].Text
 		log.Printf("%v --> %v", account, t)
 		return t
 	}
@@ -59,19 +60,23 @@ const TwitterWidgetUpdateInterval = 10 * time.Minute
 
 type TwitterWidget struct {
 	account     string
+	color       ui.Attribute
 	widget      *ui.Par
 	lastUpdated *time.Time
 }
 
-func NewTwitterWidget(account string) *TwitterWidget {
+func NewTwitterWidget(account string, color ui.Attribute) *TwitterWidget {
 	// Create base element
 	e := ui.NewPar("")
 	e.Border = true
 	e.BorderLabel = fmt.Sprintf("@%s", account)
+	e.BorderLabelFg = ui.ColorGreen
+	e.TextFgColor = color
 
 	// Create widget
 	w := &TwitterWidget{
 		account: account,
+		color:   color,
 		widget:  e,
 	}
 
@@ -90,10 +95,29 @@ func (w *TwitterWidget) update() {
 		// Get latest tweet
 		w.widget.Text = GetLatestTweet(w.account)
 	}
+
+	w.resize()
 }
 
 func (w *TwitterWidget) resize() {
-	// Do nothing
+	borderCount := 0
+	if w.widget.Border {
+		borderCount = 2
+	}
+
+	// Make line wrapping better
+	wrap := w.widget.Width - borderCount
+	if wrap <= 0 {
+		wrap = 30
+	}
+	w.widget.WrapLength = wrap
+
+	// Guess at line count
+	height := borderCount + 1 + len(w.widget.Text)/wrap
+	if height < 7 {
+		height = 7
+	}
+	w.widget.Height = height
 }
 
 func (w *TwitterWidget) getUpdateInterval() time.Duration {
