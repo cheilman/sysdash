@@ -80,3 +80,19 @@ func GetGitRepoSearchPaths() map[string]int {
 ////////////////////////////////////////////
 // Twitter Keys
 ////////////////////////////////////////////
+
+func GetTwitterConsumerKey() string {
+	return os.ExpandEnv("$SYSDASH_TWITTER_CONSUMER_KEY")
+}
+
+func GetTwitterConsumerSecret() string {
+	return os.ExpandEnv("$SYSDASH_TWITTER_CONSUMER_SECRET")
+}
+
+func GetTwitterAccessToken() string {
+	return os.ExpandEnv("$SYSDASH_TWITTER_ACCESS_TOKEN")
+}
+
+func GetTwitterAccessTokenSecret() string {
+	return os.ExpandEnv("$SYSDASH_TWITTER_ACCESS_TOKEN_SECRET")
+}
