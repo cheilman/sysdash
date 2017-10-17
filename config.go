@@ -11,7 +11,19 @@ import (
 	"strings"
 )
 
-// TODO: Get these dynamically
+////////////////////////////////////////////
+// Debugging
+////////////////////////////////////////////
+
+func LogToFile() bool {
+	// TODO: Figure out how to make this dynamic
+	return false
+}
+
+////////////////////////////////////////////
+// Git Repos
+////////////////////////////////////////////
+
 var defaultGitRepoSearch = map[string]int{
 	os.ExpandEnv("$HOME"): 3,
 }

@@ -56,14 +56,16 @@ func main() {
 		panic(ANSI_REGEXP_ERR)
 	}
 
-	// Set up logging
-	logFile, logErr := os.OpenFile("go.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0660)
-	if logErr != nil {
-		panic(logErr)
-	}
-	defer logFile.Close()
+	// Set up logging?
+	if LogToFile() {
+		logFile, logErr := os.OpenFile("go.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0660)
+		if logErr != nil {
+			panic(logErr)
+		}
+		defer logFile.Close()
 
-	log.SetOutput(logFile)
+		log.SetOutput(logFile)
+	}
 
 	// Set up the console UI
 	uiErr := ui.Init()
