@@ -51,10 +51,6 @@ var lastTimer uint64 = 0
 ////////////////////////////////////////////
 
 func main() {
-	if ANSI_REGEXP_ERR != nil {
-		panic(ANSI_REGEXP_ERR)
-	}
-
 	// Set up logging?
 	if LogToFile() {
 		logFile, logErr := os.OpenFile("go.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0660)

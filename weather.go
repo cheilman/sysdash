@@ -37,6 +37,7 @@ func NewWeatherWidget(location string) *WeatherWidget {
 	e.PaddingBottom = 1
 	e.PaddingLeft = 1
 	e.PaddingRight = 1
+	e.TextFgColor = Color8Bit(226)
 
 	// Create widget
 	w := &WeatherWidget{

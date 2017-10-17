@@ -70,7 +70,7 @@ func centerString(width int, str string) string {
 	}
 }
 
-var ANSI_REGEXP, ANSI_REGEXP_ERR = regexp.Compile(`\x1B\[(([0-9]{1,2})?(;)?([0-9]{1,2})?)?[m,K,H,f,J]`)
+var ANSI_REGEXP = regexp.MustCompile(`\x1B\[(([0-9]{1,2})?(;)?([0-9]{1,2})?)?[m,K,H,f,J]`)
 
 func stripANSI(str string) string {
 	return ANSI_REGEXP.ReplaceAllLiteralString(str, "")
@@ -91,44 +91,12 @@ func prettyPrintBytes(bytes uint64) string {
 	}
 }
 
+var FG_BG_REGEXP = regexp.MustCompile("(fg|bg|FG|BG)-")
+
 // Colors according to where value is in the min/max range
 // TODO: Is there a smarter way to do this/consolidate this config?
 func percentToAttribute(value int, minValue int, maxValue int, invert bool) ui.Attribute {
-	span := float64(maxValue - minValue)
-	fvalue := float64(value)
-
-	// If invert is set...
-	if invert {
-		// "good" is close to min and "bad" is closer to max
-		if fvalue > 0.90*span {
-			return ui.ColorRed + ui.AttrBold
-		} else if fvalue > 0.75*span {
-			return ui.ColorRed
-		} else if fvalue > 0.50*span {
-			return ui.ColorYellow + ui.AttrBold
-		} else if fvalue > 0.25*span {
-			return ui.ColorGreen
-		} else if fvalue > 0.05*span {
-			return ui.ColorGreen + ui.AttrBold
-		} else {
-			return ui.ColorBlue + ui.AttrBold
-		}
-	} else {
-		// "good" is close to max and "bad" is closer to min
-		if fvalue < 0.10*span {
-			return ui.ColorRed + ui.AttrBold
-		} else if fvalue < 0.25*span {
-			return ui.ColorRed
-		} else if fvalue < 0.50*span {
-			return ui.ColorYellow + ui.AttrBold
-		} else if fvalue < 0.75*span {
-			return ui.ColorGreen
-		} else if fvalue < 0.95*span {
-			return ui.ColorGreen + ui.AttrBold
-		} else {
-			return ui.ColorBlue + ui.AttrBold
-		}
-	}
+	return ui.StringToAttribute(FG_BG_REGEXP.ReplaceAllLiteralString(percentToAttributeString(value, minValue, maxValue, invert), ""))
 }
 
 // Colors according to where value is in the min/max range
@@ -225,4 +193,24 @@ func normalizePath(osPathname string) string {
 			return fullName
 		}
 	}
+}
+
+////////////////////////////////////////////
+// Utility: 8-bit ANSI Colors
+////////////////////////////////////////////
+
+func Color8Bit(index int) ui.Attribute {
+	i := index - 16
+	r := i / 36
+	i -= r * 36
+	g := i / 6
+	i -= g * 6
+	b := i
+
+	rgb := ui.ColorRGB(r, g, b)
+
+	log.Printf("Turned %v into (%v,%v,%v) into %08x", index, r, g, b, rgb)
+
+	return rgb
+
 }
