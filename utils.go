@@ -94,7 +94,6 @@ func prettyPrintBytes(bytes uint64) string {
 var FG_BG_REGEXP = regexp.MustCompile("(fg|bg|FG|BG)-")
 
 // Colors according to where value is in the min/max range
-// TODO: Is there a smarter way to do this/consolidate this config?
 func percentToAttribute(value int, minValue int, maxValue int, invert bool) ui.Attribute {
 	return ui.StringToAttribute(FG_BG_REGEXP.ReplaceAllLiteralString(percentToAttributeString(value, minValue, maxValue, invert), ""))
 }
@@ -221,10 +220,6 @@ func Color8Bit(index int) ui.Attribute {
 		i -= g * 6
 		b := i
 
-		rgb := ui.Attribute(index)
-
-		log.Printf("Turned %v into (%v,%v,%v) into %08x (%d)", index, r, g, b, rgb, rgb)
-
 		smallColor := ui.ColorBlack
 
 		if r >= 3 {
@@ -271,8 +266,6 @@ func Color8Bit(index int) ui.Attribute {
 			}
 		}
 
-		log.Printf("Turned %v into (%v,%v,%v) into %08x (%d) -- %v", index, r, g, b, rgb, rgb, smallColor)
-
 		retval = smallColor
 	} else {
 		// Grayscale colors
@@ -287,7 +280,91 @@ func Color8Bit(index int) ui.Attribute {
 		}
 	}
 
-	log.Printf("Index %v: %v", index, retval)
+	return retval
+
+}
+
+/**
+ * Converts 8-bit color into 3/4-bit color.
+ * https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit
+ *
+ * TODO: Figure out why ui.ColorRGB doesn't work
+ */
+func Color8BitAsString(index int) string {
+	retval := "fg-black"
+
+	if index < 8 {
+		// Dim colors
+	} else if index < 16 {
+		// Bright colors
+	} else if index < 232 {
+		// Palletized colors
+		i := index - 16
+		r := i / 36
+		i -= r * 36
+		g := i / 6
+		i -= g * 6
+		b := i
+
+		smallColor := "fg-black"
+
+		if r >= 3 {
+			// Red on
+			if g >= 3 {
+				// Green on
+				if b >= 3 {
+					// Blue on
+					smallColor = "fg-white,fg-bold"
+				} else {
+					// Blue off
+					smallColor = "fg-yellow,fg-bold"
+				}
+			} else {
+				// Green off
+				if b >= 3 {
+					// Blue on
+					smallColor = "fg-magenta,fg-bold"
+				} else {
+					// Blue off
+					smallColor = "fg-red,fg-bold"
+				}
+			}
+		} else {
+			// Red off
+			if g >= 3 {
+				// Green on
+				if b >= 3 {
+					// Blue on
+					smallColor = "fg-cyan,fg-bold"
+				} else {
+					// Blue off
+					smallColor = "fg-green,fg-bold"
+				}
+			} else {
+				// Green off
+				if b >= 3 {
+					// Blue on
+					smallColor = "fg-blue,fg-bold"
+				} else {
+					// Blue off
+					smallColor = "fg-black"
+				}
+			}
+		}
+
+		retval = smallColor
+	} else {
+		// Grayscale colors
+		if index < 238 {
+			retval = "fg-black"
+		} else if index < 244 {
+			retval = "fg-white"
+		} else if index < 250 {
+			retval = "fg-black,fg-bold"
+		} else if index < 256 {
+			retval = "fg-white,fg-bold"
+		}
+	}
 
 	return retval
 
