@@ -438,17 +438,9 @@ func ConvertANSIToColorStrings(ansi string) string {
 		// 0 is the whole string, 1+ are match groups
 		sgr := matches[1]
 		content := matches[2]
-		//
-		//log.Printf("matches: %v", matches)
-		//for i, x := range matches {
-		//	log.Printf("#%d: '%v'", i, x)
-		//}
-		log.Printf("Matched '%v', sgr is '%v', content is '%v'", matchStr, sgr, content)
 
 		colorStr := SGRToColorString(sgr)
 		coloredContent := fmt.Sprintf("[%v](%v)", content, colorStr)
-
-		log.Printf("Colored Content is '%v'", coloredContent)
 
 		return coloredContent
 	})
