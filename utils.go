@@ -205,99 +205,44 @@ func normalizePath(osPathname string) string {
  *
  * TODO: Figure out why ui.ColorRGB doesn't work
  */
-func Color8Bit(index int) ui.Attribute {
-	retval := ui.ColorBlack
-
-	if index < 8 {
-		// Dim colors
-	} else if index < 16 {
-		// Bright colors
-	} else if index < 232 {
-		// Palletized colors
-		i := index - 16
-		r := i / 36
-		i -= r * 36
-		g := i / 6
-		i -= g * 6
-		b := i
-
-		smallColor := ui.ColorBlack
-
-		if r >= 3 {
-			// Red on
-			if g >= 3 {
-				// Green on
-				if b >= 3 {
-					// Blue on
-					smallColor = ui.ColorWhite + ui.AttrBold
-				} else {
-					// Blue off
-					smallColor = ui.ColorYellow + ui.AttrBold
-				}
-			} else {
-				// Green off
-				if b >= 3 {
-					// Blue on
-					smallColor = ui.ColorMagenta + ui.AttrBold
-				} else {
-					// Blue off
-					smallColor = ui.ColorRed + ui.AttrBold
-				}
-			}
-		} else {
-			// Red off
-			if g >= 3 {
-				// Green on
-				if b >= 3 {
-					// Blue on
-					smallColor = ui.ColorCyan + ui.AttrBold
-				} else {
-					// Blue off
-					smallColor = ui.ColorGreen + ui.AttrBold
-				}
-			} else {
-				// Green off
-				if b >= 3 {
-					// Blue on
-					smallColor = ui.ColorBlue + ui.AttrBold
-				} else {
-					// Blue off
-					smallColor = ui.ColorBlack
-				}
-			}
-		}
-
-		retval = smallColor
-	} else {
-		// Grayscale colors
-		if index < 238 {
-			retval = ui.ColorBlack
-		} else if index < 244 {
-			retval = ui.ColorWhite
-		} else if index < 250 {
-			retval = ui.ColorBlack + ui.AttrBold
-		} else if index < 256 {
-			retval = ui.ColorWhite + ui.AttrBold
-		}
-	}
-
-	return retval
-
-}
-
-/**
- * Converts 8-bit color into 3/4-bit color.
- * https://en.wikipedia.org/wiki/ANSI_escape_code#8-bit
- *
- * TODO: Figure out why ui.ColorRGB doesn't work
- */
 func Color8BitAsString(index int) string {
 	retval := "fg-black"
 
-	if index < 8 {
-		// Dim colors
-	} else if index < 16 {
-		// Bright colors
+	if index < 16 {
+		switch index {
+		case 0:
+			retval = "fg-black"
+		case 1:
+			retval = "fg-red"
+		case 2:
+			retval = "fg-green"
+		case 3:
+			retval = "fg-yellow"
+		case 4:
+			retval = "fg-blue"
+		case 5:
+			retval = "fg-magenta"
+		case 6:
+			retval = "fg-cyan"
+		case 7:
+			retval = "fg-white"
+		case 8:
+			retval = "fg-black,fg-bold"
+		case 9:
+			retval = "fg-red,fg-bold"
+		case 10:
+			retval = "fg-green,fg-bold"
+		case 11:
+			retval = "fg-yellow,fg-bold"
+		case 12:
+			retval = "fg-blue,fg-bold"
+		case 13:
+			retval = "fg-magenta,fg-bold"
+		case 14:
+			retval = "fg-cyan,fg-bold"
+		case 15:
+			retval = "fg-white,fg-bold"
+		}
 	} else if index < 232 {
 		// Palletized colors
 		i := index - 16
