@@ -35,7 +35,7 @@ var IgnoreFilesystemTypes = set.New(
 	"sysfs", "proc", "udev", "devpts", "tmpfs", "cgroup", "systemd-1",
 	"mqueue", "debugfs", "hugetlbfs", "fusectl", "tracefs", "binfmt_misc",
 	"devtmpfs", "securityfs", "pstore", "autofs", "fuse.jetbrains-toolbox",
-	"fuse.gvfsd-fuse")
+	"fuse.gvfsd-fuse", "fuse.lxcfs")
 
 func loadDiskUsage() map[string]DiskUsage {
 	diskUsageData := make(map[string]DiskUsage, 0)
@@ -53,8 +53,8 @@ func loadDiskUsage() map[string]DiskUsage {
 				continue
 			}
 
-			// Also skip this docker fs, since it's a dup of root
-			if "/var/lib/docker/aufs" == mnt.MountPoint {
+			// Also skip these docker fs, since it's a dup of root
+			if "/var/lib/docker/aufs" == mnt.MountPoint || "/var/lib/docker/devicemapper" == mnt.MountPoint {
 				// Skip it
 				continue
 			}

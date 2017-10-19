@@ -53,6 +53,10 @@ func (w *NetworkWidget) update() {
 		log.Printf("Error loading network interfaces: %v", ifacesErr)
 	} else {
 		for _, i := range ifaces {
+                        if i.Name == "lo" {
+                            continue
+                        }
+
 			addrs, addrsErr := i.Addrs()
 
 			if addrsErr != nil {
