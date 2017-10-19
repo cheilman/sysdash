@@ -84,7 +84,6 @@ func (w *WeatherWidget) update() {
 					w.widget.BorderLabel = parts[0]
 
 					// Weather
-					// TODO: Figure out how to ansi up the weather somehow...  Or preserve the ANSI from the service (T)
 					w.widget.Text = ConvertANSIToColorStrings(parts[2])
 					w.widget.Text = strings.TrimRight(w.widget.Text, " \t\n")
 				}
