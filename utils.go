@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"unicode/utf8"
@@ -368,4 +369,146 @@ func Color8BitAsString(index int) string {
 
 	return retval
 
+}
+
+//////////////////////////////////////////////
+// Utility: Convert ANSI to (fg-color) syntax
+//////////////////////////////////////////////
+
+var ANSI_COLOR_GROUPING_REGEXP = regexp.MustCompile(`\x1B\x5B(?P<sgr>(?:[0-9]+;?)+)m(?P<content>[^\x1B]+)\x1B\x5B0?m`)
+
+var ANSI_COLOR_MAPPINGS = map[int]string{
+	1:  "fg-bold",
+	30: "fg-black",
+	31: "fg-red",
+	32: "fg-green",
+	33: "fg-yellow",
+	34: "fg-blue",
+	35: "fg-magenta",
+	36: "fg-cyan",
+	37: "fg-white",
+	40: "fg-black",
+	41: "fg-red",
+	42: "fg-green",
+	43: "fg-yellow",
+	44: "fg-blue",
+	45: "fg-magenta",
+	46: "fg-cyan",
+	47: "fg-white",
+}
+
+func palletizedColorToString(index int) string {
+	return Color8BitAsString(index)
+}
+
+func rgbColorToString(r int, g int, b int) string {
+	log.Printf("We don't know how to handle RGB color yet.  Color: #%02x%02x%02x)", r, g, b)
+	return "fg-white"
+}
+
+// Returns how many elements were consumed and the color string
+func SGR256ColorToString(parts []int) (int, string) {
+	if len(parts) < 1 {
+		log.Printf("Error parsing 256-color SGR code (bad length).  Length: %d, Parts: %v", len(parts), parts)
+		return 1, "fg-white"
+	}
+
+	switch parts[0] {
+	case 2:
+		if len(parts) < 4 {
+			log.Printf("Error parsing 256-color SGR code (not enough numbers for RGB).  Parts: %v", parts)
+			return 1, "fg-white"
+		} else {
+			return 4, rgbColorToString(parts[1], parts[2], parts[3])
+		}
+	case 5:
+		if len(parts) < 2 {
+			log.Printf("Error parsing 256-color SGR code (no index for palette).  Parts: %v", parts)
+			return 1, "fg-white"
+		} else {
+			return 2, palletizedColorToString(parts[1])
+		}
+	default:
+		log.Printf("Error parsing 256-color SGR code (bad code).  Code: %d, Parts: %v", parts[0], parts)
+		return 1, "fg-white"
+	}
+}
+
+func SGRToColorString(sgr string) string {
+	parts := strings.Split(sgr, ";")
+	iparts := make([]int, len(parts))
+
+	for i, x := range parts {
+		iparts[i], _ = strconv.Atoi(x)
+	}
+
+	i := 0
+	retval := ""
+
+	appendRet := func(str string) {
+		if len(retval) > 0 {
+			retval += "," + str
+		} else {
+			retval += str
+		}
+	}
+
+	for i < len(iparts) {
+		if val, ok := ANSI_COLOR_MAPPINGS[iparts[i]]; ok {
+			// if it's in the map, use that
+			appendRet(val)
+		} else {
+			switch iparts[i] {
+			case 38:
+				// Foreground palette or RGB
+				relevantSlice := iparts[i+1:]
+				consumed, color := SGR256ColorToString(relevantSlice)
+
+				i += consumed
+				appendRet(color)
+
+			case 48:
+				// Background palette or RGB
+				relevantSlice := iparts[i+1:]
+				consumed, color := SGR256ColorToString(relevantSlice)
+
+				color = strings.Replace(color, "fg", "bg", -1)
+
+				i += consumed
+				appendRet(color)
+
+			}
+		}
+
+		i++
+	}
+
+	return retval
+}
+
+func ConvertANSIToColorStrings(ansi string) string {
+	log.Printf("Looking for matches in '%v'", ansi)
+	retval := ANSI_COLOR_GROUPING_REGEXP.ReplaceAllStringFunc(ansi, func(matchStr string) string {
+		// matchStr should be the regexp, let's match it again to get the groupings
+		matches := ANSI_COLOR_GROUPING_REGEXP.FindStringSubmatch(matchStr)
+
+		// 0 is the whole string, 1+ are match groups
+		sgr := matches[1]
+		content := matches[2]
+		//
+		//log.Printf("matches: %v", matches)
+		//for i, x := range matches {
+		//	log.Printf("#%d: '%v'", i, x)
+		//}
+		log.Printf("Matched '%v', sgr is '%v', content is '%v'", matchStr, sgr, content)
+
+		colorStr := SGRToColorString(sgr)
+		coloredContent := fmt.Sprintf("[%v](%v)", content, colorStr)
+
+		log.Printf("Colored Content is '%v'", coloredContent)
+
+		return coloredContent
+	})
+
+	return stripANSI(retval)
 }

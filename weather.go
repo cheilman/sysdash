@@ -37,7 +37,6 @@ func NewWeatherWidget(location string) *WeatherWidget {
 	e.PaddingBottom = 1
 	e.PaddingLeft = 1
 	e.PaddingRight = 1
-	e.TextFgColor = Color8Bit(226)
 
 	// Create widget
 	w := &WeatherWidget{
@@ -61,7 +60,7 @@ func (w *WeatherWidget) update() {
 
 		client := &http.Client{}
 
-		req, err := http.NewRequest("GET", fmt.Sprintf("http://wttr.in/%s?T0q", w.location), nil)
+		req, err := http.NewRequest("GET", fmt.Sprintf("http://wttr.in/%s?0q", w.location), nil)
 
 		if err != nil {
 			log.Printf("Error creating request: %v", err)
@@ -86,7 +85,7 @@ func (w *WeatherWidget) update() {
 
 					// Weather
 					// TODO: Figure out how to ansi up the weather somehow...  Or preserve the ANSI from the service (T)
-					w.widget.Text = stripANSI(parts[2])
+					w.widget.Text = ConvertANSIToColorStrings(parts[2])
 					w.widget.Text = strings.TrimRight(w.widget.Text, " \t\n")
 				}
 			}
