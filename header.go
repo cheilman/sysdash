@@ -24,7 +24,7 @@ type HeaderWidget struct {
 func NewHeaderWidget() *HeaderWidget {
 	// Create base element
 	e := ui.NewPar("")
-	e.BorderFg = ui.ColorCyan + ui.AttrBold
+	e.BorderFg = ui.ColorCyan | ui.AttrBold
 
 	// Static information
 	userName := getUsername()

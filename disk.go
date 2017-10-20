@@ -224,7 +224,7 @@ func NewDiskGauge(usage DiskUsage) *ui.Gauge {
 	g.Percent = free
 	g.Label = fmt.Sprintf("Free: %s/%s (%d%%)",
 		prettyPrintBytes(usage.AvailableSizeInBytes), prettyPrintBytes(usage.TotalSizeInBytes), free)
-	g.PercentColor = ui.ColorWhite + ui.AttrBold
+	g.PercentColor = ui.ColorWhite | ui.AttrBold
 
 	g.BarColor = percentToAttribute(free, 0, 100, false)
 

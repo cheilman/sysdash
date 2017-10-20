@@ -75,7 +75,7 @@ func (w *BatteryWidget) update() {
 
 				if isCharging {
 					w.widget.BorderLabel = "Battery (charging)"
-					w.widget.BorderLabelFg = ui.ColorCyan + ui.AttrBold
+					w.widget.BorderLabelFg = ui.ColorCyan | ui.AttrBold
 				} else {
 					w.widget.BorderLabel = "Battery"
 					w.widget.BorderLabelFg = battColor
@@ -85,7 +85,7 @@ func (w *BatteryWidget) update() {
 				w.widget.BarColor = battColor
 				w.widget.Label = fmt.Sprintf("%d%% (%s)", batteryPercent, timeLeft)
 				w.widget.LabelAlign = ui.AlignRight
-				w.widget.PercentColor = ui.ColorWhite + ui.AttrBold
+				w.widget.PercentColor = ui.ColorWhite | ui.AttrBold
 				//w.widget.PercentColorHighlighted = ui.ColorBlack
 				w.widget.PercentColorHighlighted = w.widget.PercentColor
 			} else {

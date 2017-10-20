@@ -105,7 +105,7 @@ func main() {
 	repo := NewGitRepoWidget()
 	widgets = append(widgets, repo)
 
-	twitter1 := NewTwitterWidget(GetTwitterAccount1(), ui.ColorBlue+ui.AttrBold)
+	twitter1 := NewTwitterWidget(GetTwitterAccount1(), ui.ColorBlue|ui.AttrBold)
 	widgets = append(widgets, twitter1)
 
 	twitter2 := NewTwitterWidget(GetTwitterAccount2(), ui.ColorCyan)

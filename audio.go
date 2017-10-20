@@ -65,7 +65,7 @@ func (w *AudioWidget) update() {
 		w.widget.Percent = 0
 		w.widget.Label = "UNSUPPORTED"
 		w.widget.LabelAlign = ui.AlignCenter
-		w.widget.PercentColor = ui.ColorMagenta + ui.AttrBold
+		w.widget.PercentColor = ui.ColorMagenta | ui.AttrBold
 	} else {
 		// Just query status
 		sink := w.getBestSink()
@@ -96,7 +96,7 @@ func (w *AudioWidget) update() {
 		w.widget.Percent = int(w.volumePercent)
 		w.widget.Label = "{{percent}}%"
 		w.widget.LabelAlign = ui.AlignRight
-		w.widget.PercentColor = ui.ColorWhite + ui.AttrBold
+		w.widget.PercentColor = ui.ColorWhite | ui.AttrBold
 		w.widget.PercentColorHighlighted = w.widget.PercentColor
 
 		if w.isMuted {

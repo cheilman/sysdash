@@ -34,7 +34,7 @@ func NewCPUWidget() *CPUWidget {
 	e.Height = 20
 	e.Border = true
 	e.PaddingTop = 1
-	e.LineColor = ui.ColorBlue + ui.AttrBold
+	e.LineColor = ui.ColorBlue | ui.AttrBold
 	e.AxesColor = ui.ColorYellow
 
 	// Create widget

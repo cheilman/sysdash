@@ -41,7 +41,7 @@ func NewHostInfoWidget() *HostInfoWidget {
 	e := ui.NewList()
 	e.Height = 5
 	e.Border = true
-	e.BorderFg = ui.ColorBlue + ui.AttrBold
+	e.BorderFg = ui.ColorBlue | ui.AttrBold
 
 	// Create widget
 	w := &HostInfoWidget{
