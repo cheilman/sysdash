@@ -430,7 +430,6 @@ func SGRToColorString(sgr string) string {
 }
 
 func ConvertANSIToColorStrings(ansi string) string {
-	log.Printf("Looking for matches in '%v'", ansi)
 	retval := ANSI_COLOR_GROUPING_REGEXP.ReplaceAllStringFunc(ansi, func(matchStr string) string {
 		// matchStr should be the regexp, let's match it again to get the groupings
 		matches := ANSI_COLOR_GROUPING_REGEXP.FindStringSubmatch(matchStr)
