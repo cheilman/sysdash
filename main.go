@@ -159,7 +159,7 @@ func main() {
 		ui.StopLoop()
 	})
 
-        firstTimeResize := false
+	firstTimeResize := false
 	ui.Handle("/timer/5s", func(e ui.Event) {
 		// Call all update funcs
 		for _, w := range widgets {
@@ -167,12 +167,12 @@ func main() {
 		}
 
 		// Call all resize funcs (only the first time)
-                if !firstTimeResize {
-                    firstTimeResize = true
-                    for _, w := range widgets {
-                            w.resize()
-                    }
-                }
+		if !firstTimeResize {
+			firstTimeResize = true
+			for _, w := range widgets {
+				w.resize()
+			}
+		}
 
 		// Re-render
 		render()
