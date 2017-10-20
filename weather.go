@@ -57,7 +57,7 @@ func (w *WeatherWidget) getGridWidget() ui.GridBufferer {
 func (w *WeatherWidget) update() {
 	if shouldUpdate(w) {
 		// Load weather info
-                w.widget.Text = ""
+		w.widget.Text = ""
 
 		client := &http.Client{}
 
@@ -79,31 +79,31 @@ func (w *WeatherWidget) update() {
 				if err != nil {
 					log.Printf("Failed to read body from weather: %v", err)
 				} else {
-                                        bodyStr := string(body)
+					bodyStr := string(body)
 
-                                        if len(bodyStr) == 0 {
-                                            // Error
-                                            w.widget.BorderLabel = "Weather: ERROR"
-                                        } else {
-                                            parts := strings.SplitN(bodyStr, "\n", 3)
+					if len(bodyStr) == 0 {
+						// Error
+						w.widget.BorderLabel = "Weather: ERROR"
+					} else {
+						parts := strings.SplitN(bodyStr, "\n", 3)
 
-                                            if len(parts) > 0 {
-                                                // Header
-                                                w.widget.BorderLabel = parts[0]
+						if len(parts) > 0 {
+							// Header
+							w.widget.BorderLabel = parts[0]
 
-                                                if len(parts) > 2 {
-                                                    // Weather
-                                                    w.widget.Text = ConvertANSIToColorStrings(parts[2])
-                                                } else if len(parts) > 1 {
-                                                    // Maybe terrible?
-                                                    w.widget.Text = ConvertANSIToColorStrings(parts[1])
-                                                }
-                                                w.widget.Text = strings.TrimRight(w.widget.Text, " \t\n")
-                                            } else {
-                                                // Error
-                                                w.widget.BorderLabel = "Weather: ERROR"
-                                            }
-                                        }
+							if len(parts) > 2 {
+								// Weather
+								w.widget.Text = ConvertANSIToColorStrings(parts[2])
+							} else if len(parts) > 1 {
+								// Maybe terrible?
+								w.widget.Text = ConvertANSIToColorStrings(parts[1])
+							}
+							w.widget.Text = strings.TrimRight(w.widget.Text, " \t\n")
+						} else {
+							// Error
+							w.widget.BorderLabel = "Weather: ERROR"
+						}
+					}
 				}
 			}
 		}
