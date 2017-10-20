@@ -36,6 +36,7 @@ package main
  */
 
 import (
+	"io/ioutil"
 	"log"
 	"os"
 	"time"
@@ -60,6 +61,10 @@ func main() {
 		defer logFile.Close()
 
 		log.SetOutput(logFile)
+	} else {
+		// Disable logging
+		log.SetFlags(0)
+		log.SetOutput(ioutil.Discard)
 	}
 
 	// Set up the console UI
