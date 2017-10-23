@@ -117,7 +117,7 @@ func (w *CPUWidget) loadProcessorStats() {
 		w.mostRecent1MinLoad = loadavg.Last1Min
 		w.mostRecent5MinLoad = loadavg.Last5Min
 		now := time.Now()
-		ts := fmt.Sprintf("%02d:%02d", now.Minute(), now.Second())
+		ts := fmt.Sprintf("%02d:%02d", now.Hour(), now.Minute())
 
 		// Record, keep a fixed number around
 		if len(w.loadLast1Min) > (w.widget.Width * 2) {
