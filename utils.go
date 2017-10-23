@@ -318,7 +318,10 @@ func Color8BitAsString(index int) string {
 // Utility: Convert ANSI to (fg-color) syntax
 //////////////////////////////////////////////
 
-var ANSI_COLOR_GROUPING_REGEXP = regexp.MustCompile(`\x1B\x5B(?P<sgr>(?:[0-9]+;?)+)m(?P<content>[^\x1B]+)\x1B\x5B0?m`)
+// TODO: Regexp doesn't support multiple starts before a reset
+// Ex ".[38;5;226m_ /"".[38;5;250m.-.    .[0m"
+//var ANSI_COLOR_GROUPING_REGEXP = regexp.MustCompile(`\x1B\x5B(?P<sgr>(?:[0-9]+;?)+)m(?P<content>[^\x1B]+)\x1B\x5B0?m`)
+var ANSI_COLOR_GROUPING_REGEXP = regexp.MustCompile(`\x1B\x5B(?P<sgr>(?:[0-9]+;?)+)m(?P<content>[^\x1B]+)`)
 
 var ANSI_COLOR_MAPPINGS = map[int]string{
 	1:  "fg-bold",
