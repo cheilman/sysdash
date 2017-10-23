@@ -442,9 +442,14 @@ func ConvertANSIToColorStrings(ansi string) string {
 		content := matches[2]
 
 		colorStr := SGRToColorString(sgr)
-		coloredContent := fmt.Sprintf("[%v](%v)", content, colorStr)
 
-		return coloredContent
+		if len(colorStr) <= 0 {
+			// No change
+			return content
+		} else {
+			coloredContent := fmt.Sprintf("[%v](%v)", content, colorStr)
+			return coloredContent
+		}
 	})
 
 	return stripANSI(retval)

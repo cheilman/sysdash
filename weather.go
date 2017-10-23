@@ -98,7 +98,7 @@ func (w *WeatherWidget) update() {
 								// Maybe terrible?
 								w.widget.Text = ConvertANSIToColorStrings(parts[1])
 							}
-							w.widget.Text = strings.TrimRight(w.widget.Text, " \t\n")
+							w.widget.Text = strings.TrimRight(w.widget.Text, " \t\n\r\x0A")
 						} else {
 							// Error
 							w.widget.BorderLabel = "Weather: ERROR"
