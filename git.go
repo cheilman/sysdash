@@ -78,6 +78,14 @@ func NewRepoInfo(fullPath string) RepoInfo {
 		} else {
 			log.Printf("Error getting relative: %v", relErr)
 		}
+	} else if strings.HasPrefix(fullPath, CANONHOME) {
+		relative, relErr := filepath.Rel(CANONHOME, fullPath)
+
+		if relErr == nil {
+			homePath = filepath.Join("~", relative)
+		} else {
+			log.Printf("Error getting relative: %v", relErr)
+		}
 	}
 
 	// Load repo status
@@ -207,6 +215,7 @@ func buildColoredStatusStringFromMap(status map[rune]int) string {
 const GitRepoListUpdateInterval = 30 * time.Second
 
 var HOME = os.ExpandEnv("$HOME")
+var CANONHOME = normalizePath(HOME)
 
 type CachedGitRepoList struct {
 	repoSearch  map[string]int
