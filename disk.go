@@ -69,7 +69,7 @@ func loadDiskUsage() map[string]DiskUsage {
 				var availBytes uint64 = 0
 				var bytesFreePercent float64 = 0
 				var totalInodes uint64 = 0
-				var usedInodes uint64 = 0
+				var freeInodes uint64 = 0
 				var inodesFreePercent float64 = 0
 
 				var blocksize uint64 = 0
@@ -89,9 +89,9 @@ func loadDiskUsage() map[string]DiskUsage {
 				}
 
 				totalInodes = statfs.Files
-				usedInodes = statfs.Ffree
+				freeInodes = statfs.Ffree
 				if totalInodes > 0 {
-					inodesFreePercent = float64(totalInodes-usedInodes) / float64(totalInodes)
+					inodesFreePercent = float64(freeInodes) / float64(totalInodes)
 				} else {
 					log.Printf("Bad total inodes: %v", totalInodes)
 				}
@@ -103,7 +103,7 @@ func loadDiskUsage() map[string]DiskUsage {
 					AvailableSizeInBytes: availBytes,
 					FreePercentage:       bytesFreePercent,
 					TotalInodes:          totalInodes,
-					InodesInUse:          usedInodes,
+					InodesInUse:          totalInodes - freeInodes,
 					FreeInodesPercentage: inodesFreePercent,
 				}
 
