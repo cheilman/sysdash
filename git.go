@@ -237,15 +237,17 @@ func (w *CachedGitRepoList) setLastUpdated(t time.Time) {
 
 func (w *CachedGitRepoList) update() {
 	if shouldUpdate(w) {
-		repos := getGitRepositories(w.repoSearch)
+		repoPaths := getGitRepositories(w.repoSearch)
 
-		w.Repos = make([]RepoInfo, 0)
+		repos := make([]RepoInfo, 0)
 
-		for _, repo := range repos {
+		for _, repo := range repoPaths {
 			repoInfo := NewRepoInfo(repo)
 
-			w.Repos = append(w.Repos, repoInfo)
+			repos = append(repos, repoInfo)
 		}
+
+		w.Repos = repos
 	}
 
 	// Update status for all the repos as well
@@ -402,8 +404,8 @@ func (w *GitRepoWidget) getGridWidget() ui.GridBufferer {
 }
 
 func (w *GitRepoWidget) update() {
-	w.widget.Rows = [][]string{}
-	w.widget.Height = 2
+	rows := [][]string{}
+	height := 2
 
 	// Load repos
 	cachedGitRepos.update()
@@ -430,9 +432,13 @@ func (w *GitRepoWidget) update() {
 
 		line := []string{name, repo.BranchStatus, repo.Status}
 
-		w.widget.Rows = append(w.widget.Rows, line)
-		w.widget.Height++
+		rows = append(rows, line)
+		height++
 	}
+
+	w.widget.Rows = rows
+	w.widget.Height = height
+
 }
 
 func (w *GitRepoWidget) resize() {
