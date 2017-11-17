@@ -90,7 +90,7 @@ func GetGitRepoSearchPaths() map[string]int {
 
 const DefaultTwitter1 = "tinycarebot"
 const DefaultTwitter2 = "selfcare_bot"
-const DefaultTwitter3 = "str_voyage"
+const DefaultTwitter3 = "CodeWisdom"
 
 func GetTwitterAccount1() string {
 	acct := os.ExpandEnv("$SYSDASH_TWITTER_ACCT_1")
