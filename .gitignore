@@ -3,6 +3,7 @@
 #
 
 sysdash
+/go.log
 
 #
 # GitHub .gitignore
@@ -22,3 +23,6 @@ sysdash
 
 # Project-local glide cache, RE: https://github.com/Masterminds/glide/issues/736
 .glide/
+
+# IntelliJ
+.idea/
