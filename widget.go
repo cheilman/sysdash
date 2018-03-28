@@ -7,7 +7,7 @@ package main
 import (
 	"time"
 
-	ui "github.com/gizak/termui"
+	ui "github.com/ttacon/termui"
 )
 
 ////////////////////////////////////////////

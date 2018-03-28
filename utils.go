@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"unicode/utf8"
 
-	ui "github.com/gizak/termui"
+	ui "github.com/ttacon/termui"
 )
 
 ////////////////////////////////////////////

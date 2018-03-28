@@ -41,7 +41,7 @@ import (
 	"os"
 	"time"
 
-	ui "github.com/gizak/termui"
+	ui "github.com/ttacon/termui"
 )
 
 var timerCounter uint64 = 0

@@ -7,7 +7,7 @@ package main
 import (
 	"log"
 
-	ui "github.com/gizak/termui"
+	ui "github.com/ttacon/termui"
 	"github.com/sqp/pulseaudio"
 )
 

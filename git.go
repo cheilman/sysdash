@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	ui "github.com/gizak/termui"
+	ui "github.com/ttacon/termui"
 	walk "github.com/karrick/godirwalk"
 )
 

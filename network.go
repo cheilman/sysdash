@@ -9,7 +9,7 @@ import (
 	"log"
 	"net"
 
-	ui "github.com/gizak/termui"
+	ui "github.com/ttacon/termui"
 )
 
 ////////////////////////////////////////////
