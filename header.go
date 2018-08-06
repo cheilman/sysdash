@@ -9,7 +9,7 @@ import (
 	"os"
 	"os/user"
 
-	ui "github.com/ttacon/termui"
+	ui "github.com/gizak/termui"
 )
 
 ////////////////////////////////////////////

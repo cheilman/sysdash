@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	ui "github.com/ttacon/termui"
+	ui "github.com/gizak/termui"
 )
 
 ////////////////////////////////////////////

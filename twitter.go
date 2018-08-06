@@ -11,7 +11,7 @@ import (
 
 	"github.com/dghubble/go-twitter/twitter"
 	"github.com/dghubble/oauth1"
-	ui "github.com/ttacon/termui"
+	ui "github.com/gizak/termui"
 )
 
 ////////////////////////////////////////////

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	linuxproc "github.com/c9s/goprocinfo/linux"
-	ui "github.com/ttacon/termui"
+	ui "github.com/gizak/termui"
 	set "gopkg.in/fatih/set.v0"
 )
 
