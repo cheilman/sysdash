@@ -13,7 +13,7 @@ import (
 
 	linuxproc "github.com/c9s/goprocinfo/linux"
 	ui "github.com/gizak/termui"
-	set "gopkg.in/fatih/set.v0"
+	set "github.com/fatih/set"
 )
 
 ////////////////////////////////////////////
@@ -31,11 +31,16 @@ type DiskUsage struct {
 	FreeInodesPercentage float64
 }
 
-var IgnoreFilesystemTypes = set.New(
-	"sysfs", "proc", "udev", "devpts", "tmpfs", "cgroup", "systemd-1",
+var IgnoreFilesystemTypes = buildIgnoreSet()
+
+func buildIgnoreSet() set.Interface{
+    ignore := set.New(set.NonThreadSafe)
+    ignore.Add("sysfs", "proc", "udev", "devpts", "tmpfs", "cgroup", "systemd-1",
 	"mqueue", "debugfs", "hugetlbfs", "fusectl", "tracefs", "binfmt_misc",
 	"devtmpfs", "securityfs", "pstore", "autofs", "fuse.jetbrains-toolbox",
 	"fuse.gvfsd-fuse", "fuse.lxcfs")
+    return ignore
+}
 
 func loadDiskUsage() map[string]DiskUsage {
 	diskUsageData := make(map[string]DiskUsage, 0)
