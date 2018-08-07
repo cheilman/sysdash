@@ -12,8 +12,8 @@ import (
 	"time"
 
 	linuxproc "github.com/c9s/goprocinfo/linux"
-	ui "github.com/gizak/termui"
 	set "github.com/fatih/set"
+	ui "github.com/gizak/termui"
 )
 
 ////////////////////////////////////////////
@@ -33,13 +33,13 @@ type DiskUsage struct {
 
 var IgnoreFilesystemTypes = buildIgnoreSet()
 
-func buildIgnoreSet() set.Interface{
-    ignore := set.New(set.NonThreadSafe)
-    ignore.Add("sysfs", "proc", "udev", "devpts", "tmpfs", "cgroup", "systemd-1",
-	"mqueue", "debugfs", "hugetlbfs", "fusectl", "tracefs", "binfmt_misc",
-	"devtmpfs", "securityfs", "pstore", "autofs", "fuse.jetbrains-toolbox",
-	"fuse.gvfsd-fuse", "fuse.lxcfs")
-    return ignore
+func buildIgnoreSet() set.Interface {
+	ignore := set.New(set.NonThreadSafe)
+	ignore.Add("sysfs", "proc", "udev", "devpts", "tmpfs", "cgroup", "systemd-1",
+		"mqueue", "debugfs", "hugetlbfs", "fusectl", "tracefs", "binfmt_misc",
+		"devtmpfs", "securityfs", "pstore", "autofs", "fuse.jetbrains-toolbox",
+		"fuse.gvfsd-fuse", "fuse.lxcfs")
+	return ignore
 }
 
 func loadDiskUsage() map[string]DiskUsage {
