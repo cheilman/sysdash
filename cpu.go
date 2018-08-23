@@ -39,7 +39,7 @@ func NewCPUWidget() *CPUWidget {
 	e.Height = 20
 	e.Border = true
 	e.PaddingTop = 1
-	e.LineColor = ui.ColorBlue | ui.AttrBold
+	e.LineColor["cpu"] = ui.ColorBlue | ui.AttrBold
 	e.AxesColor = ui.ColorYellow
 
 	// Create widget
@@ -73,7 +73,7 @@ func (w *CPUWidget) update() {
 		loadColorString := percentToAttributeString(int(100.0*loadPercent), 0, 100, true)
 
 		w.widget.BorderLabel = fmt.Sprintf("[CPU: %0.2f%%](%s)[───](fg-white)[5m Load: %0.2f](%s)", w.cpuPercent*100, cpuColorString, w.mostRecent5MinLoad, loadColorString)
-		w.widget.Data = w.loadLast1Min
+		w.widget.Data["cpu"] = w.loadLast1Min
 		w.widget.DataLabels = w.timestamps
 
 		// Adjust graph axes color by Load value (never bold)
