@@ -44,9 +44,6 @@ import (
 	ui "github.com/gizak/termui"
 )
 
-var timerCounter uint64 = 0
-var lastTimer uint64 = 0
-
 ////////////////////////////////////////////
 // Where the real stuff happens
 ////////////////////////////////////////////
@@ -73,8 +70,6 @@ func main() {
 		panic(uiErr)
 	}
 	defer ui.Close()
-
-	ui.DefaultEvtStream.Merge("timer", ui.NewTimerCh(5*time.Second))
 
 	//
 	// Create the widgets
@@ -154,38 +149,44 @@ func main() {
 
 	render()
 
-	ui.Handle("/sys/kbd/q", func(ui.Event) {
+	ui.Handle("q", func(ui.Event) {
 		// press q to quit
 		ui.StopLoop()
 	})
 
-	ui.Handle("/sys/kbd/C-c", func(ui.Event) {
+	ui.Handle("C-c", func(ui.Event) {
 		// ctrl-c to quit
 		ui.StopLoop()
 	})
 
 	firstTimeResize := false
-	ui.Handle("/timer/5s", func(e ui.Event) {
-		// Call all update funcs
-		for _, w := range widgets {
-			w.update()
-		}
-
-		// Call all resize funcs (only the first time)
-		if !firstTimeResize {
-			firstTimeResize = true
+	ticker := time.NewTicker(5 * time.Second)
+	go func() {
+		for {
+			// Call all update funcs
 			for _, w := range widgets {
-				w.resize()
+				w.update()
 			}
+
+			// Call all resize funcs (only the first time)
+			if !firstTimeResize {
+				firstTimeResize = true
+				for _, w := range widgets {
+					w.resize()
+				}
+			}
+
+			// Re-render
+			render()
+			<-ticker.C
 		}
+	}()
 
-		// Re-render
-		render()
-	})
+	ui.Handle("<Resize>", func(e ui.Event) {
+		payload := e.Payload.(ui.Resize)
 
-	ui.Handle("/sys/wnd/resize", func(ui.Event) {
 		// Re-layout on resize
-		ui.Body.Width = ui.TermWidth() - 2
+		ui.Body.Width = payload.Width - 2
 
 		// Call all resize funcs
 		for _, w := range widgets {
