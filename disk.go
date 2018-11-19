@@ -38,7 +38,8 @@ func buildIgnoreSet() set.Interface {
 	ignore.Add("sysfs", "proc", "udev", "devpts", "tmpfs", "cgroup", "systemd-1",
 		"mqueue", "debugfs", "hugetlbfs", "fusectl", "tracefs", "binfmt_misc",
 		"devtmpfs", "securityfs", "pstore", "autofs", "fuse.jetbrains-toolbox",
-		"fuse.gvfsd-fuse", "fuse.lxcfs")
+		"fuse.gvfsd-fuse", "fuse.lxcfs", "fuse.objfsd", "fuse.srcfsd", "fuse.x20fsd",
+		"fuse.binfs", "sunrpc", "efivarfs")
 	return ignore
 }
 
@@ -81,8 +82,8 @@ func loadDiskUsage() map[string]DiskUsage {
 				if statfs.Bsize > 0 {
 					blocksize = uint64(statfs.Bsize)
 				} else {
-					blocksize = 1 // bad guess
-					log.Printf("Bad block size: %v", statfs.Bsize)
+					// Skip it
+					continue
 				}
 
 				totalBytes = statfs.Blocks * blocksize
@@ -90,7 +91,8 @@ func loadDiskUsage() map[string]DiskUsage {
 				if totalBytes > 0 {
 					bytesFreePercent = float64(availBytes) / float64(totalBytes)
 				} else {
-					log.Printf("Bad total bytes: %v", totalBytes)
+					// Skip it
+					continue
 				}
 
 				totalInodes = statfs.Files
