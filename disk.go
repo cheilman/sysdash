@@ -166,14 +166,14 @@ const DiskHeaderText = "--- Disks ---"
 
 type DiskColumn struct {
 	column  *ui.Row
-	header  *ui.Par
+	header  *ui.Paragraph
 	widgets []*ui.Gauge
 }
 
 func NewDiskColumn(span int, offset int) *DiskColumn {
 	c := ui.NewCol(span, offset)
 
-	h := ui.NewPar(DiskHeaderText)
+	h := ui.NewParagraph(DiskHeaderText)
 	h.Border = false
 	h.TextFgColor = ui.ColorGreen
 	h.Height = 1

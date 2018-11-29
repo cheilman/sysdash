@@ -23,13 +23,13 @@ const WeatherWidgetUpdateInterval = 1 * time.Hour
 
 type WeatherWidget struct {
 	location    string
-	widget      *ui.Par
+	widget      *ui.Paragraph
 	lastUpdated *time.Time
 }
 
 func NewWeatherWidget(location string) *WeatherWidget {
 	// Create base element
-	e := ui.NewPar("")
+	e := ui.NewParagraph("")
 	e.Border = true
 	e.Height = 9
 	e.BorderLabelFg = ui.ColorGreen

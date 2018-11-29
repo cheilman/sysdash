@@ -58,13 +58,13 @@ const TwitterWidgetUpdateInterval = 10 * time.Minute
 type TwitterWidget struct {
 	account     string
 	color       ui.Attribute
-	widget      *ui.Par
+	widget      *ui.Paragraph
 	lastUpdated *time.Time
 }
 
 func NewTwitterWidget(account string, color ui.Attribute) *TwitterWidget {
 	// Create base element
-	e := ui.NewPar("")
+	e := ui.NewParagraph("")
 	e.Border = true
 	e.BorderLabel = fmt.Sprintf("@%s", account)
 	e.BorderLabelFg = ui.ColorGreen

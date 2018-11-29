@@ -48,11 +48,11 @@ func shouldUpdate(updater UpdateInterval) bool {
 }
 
 type TempWidget struct {
-	widget *ui.Par
+	widget *ui.Paragraph
 }
 
 func NewTempWidget(l string) *TempWidget {
-	p := ui.NewPar(l)
+	p := ui.NewParagraph(l)
 	p.Height = 5
 	p.BorderLabel = l
 

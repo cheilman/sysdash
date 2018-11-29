@@ -44,6 +44,66 @@ import (
 	ui "github.com/gizak/termui"
 )
 
+//
+// Rendering loop
+//
+
+func loop(widgets []CAHWidget, header *HeaderWidget) {
+	render := func() {
+		ui.Body.Align()
+		ui.Clear()
+		ui.Render(header.widget, ui.Body)
+	}
+
+	//
+	//  Activate
+	//
+
+	render()
+	firstTimeResize := false
+	ticker := time.NewTicker(5 * time.Second)
+
+	for {
+		// Call all resize funcs (only the first time)
+		if !firstTimeResize {
+			firstTimeResize = true
+			for _, w := range widgets {
+				w.resize()
+				w.update()
+			}
+
+			render()
+		}
+
+		select {
+		case e := <-ui.PollEvent():
+			switch e.ID {
+			case "q", "<C-c>":
+				return
+			case "<Resize>":
+				payload := e.Payload.(ui.Resize)
+
+				// Re-layout on resize
+				ui.Body.Width = payload.Width - 2
+
+				// Call all resize funcs
+				for _, w := range widgets {
+					w.resize()
+				}
+
+				// Re-render
+				render()
+			}
+		case <-ticker.C:
+			for _, w := range widgets {
+				w.update()
+			}
+
+			render()
+		}
+	}
+}
+
 ////////////////////////////////////////////
 // Where the real stuff happens
 ////////////////////////////////////////////
@@ -137,65 +197,5 @@ func main() {
 
 	ui.Body.Align()
 
-	render := func() {
-		ui.Body.Align()
-		ui.Clear()
-		ui.Render(header.widget, ui.Body)
-	}
-
-	//
-	//  Activate
-	//
-
-	render()
-
-	ui.Handle("q", func(ui.Event) {
-		// press q to quit
-		ui.StopLoop()
-	})
-
-	ui.Handle("C-c", func(ui.Event) {
-		// ctrl-c to quit
-		ui.StopLoop()
-	})
-
-	firstTimeResize := false
-	ticker := time.NewTicker(5 * time.Second)
-	go func() {
-		for {
-			// Call all update funcs
-			for _, w := range widgets {
-				w.update()
-			}
-
-			// Call all resize funcs (only the first time)
-			if !firstTimeResize {
-				firstTimeResize = true
-				for _, w := range widgets {
-					w.resize()
-				}
-			}
-
-			// Re-render
-			render()
-			<-ticker.C
-		}
-	}()
-
-	ui.Handle("<Resize>", func(e ui.Event) {
-		payload := e.Payload.(ui.Resize)
-
-		// Re-layout on resize
-		ui.Body.Width = payload.Width - 2
-
-		// Call all resize funcs
-		for _, w := range widgets {
-			w.resize()
-		}
-
-		// Re-render
-		render()
-	})
-
-	ui.Loop()
+	loop(widgets, header)
 }

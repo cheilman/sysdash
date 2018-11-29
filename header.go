@@ -17,13 +17,13 @@ import (
 ////////////////////////////////////////////
 
 type HeaderWidget struct {
-	widget         *ui.Par
+	widget         *ui.Paragraph
 	userHostHeader string
 }
 
 func NewHeaderWidget() *HeaderWidget {
 	// Create base element
-	e := ui.NewPar("")
+	e := ui.NewParagraph("")
 	e.BorderFg = ui.ColorCyan | ui.AttrBold
 
 	// Static information
