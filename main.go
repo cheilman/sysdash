@@ -76,7 +76,7 @@ func loop(widgets []CAHWidget, header *HeaderWidget) {
 		}
 
 		select {
-		case e := <-ui.PollEvent():
+		case e := <-ui.PollEvents():
 			switch e.ID {
 			case "q", "<C-c>":
 				return
